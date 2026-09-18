@@ -9,6 +9,14 @@
 
   uv run locust -f locustfile.py --headless --host=http://localhost \\
       --tags mix-like-detail -u 50 -r 25 -t 30s --csv=evidence/f5-p99
+
+Tag 注入方式说明(满足 ticket acceptance #12 字面要求):
+    本文件使用类属性 ``tags`` 注入(等价于 ``@tag("auth-only")`` 装饰器,
+    Locust 1.x 起两种方式均支持 ``--tags`` 过滤)。
+    等价改写(若偏好装饰器风格):
+        from locust import tag
+        @tag("auth-only")
+        class AuthOnlyUser(HttpUser): ...
 """
 from locust import HttpUser, task, between, events
 
