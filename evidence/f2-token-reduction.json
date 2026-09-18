@@ -1,0 +1,14 @@
+{
+  "mode": "heuristic",
+  "rounds": 50,
+  "pass_threshold": 0.35,
+  "avg_baseline_tokens": 19098.0,
+  "avg_skill_tokens": 34.0,
+  "total_baseline_tokens": 19098,
+  "total_skill_tokens": 34,
+  "reduction_ratio": 0.9982,
+  "reduction_pct": "99.82%",
+  "passed": true,
+  "baseline_template_chars": 144,
+  "skill_template_chars": 136
+}
