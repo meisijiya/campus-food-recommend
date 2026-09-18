@@ -1,0 +1,49 @@
+# --- Build ---
+target/
+build/
+out/
+*.class
+*.jar
+*.war
+*.ear
+
+# --- Maven wrapper ---
+.mvn/wrapper/maven-wrapper.jar
+
+# --- IDE ---
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# --- Logs / temp ---
+*.log
+logs/
+tmp/
+.tmp/
+
+# --- Secrets(必须不跟踪) ---
+.env
+.env.*
+secrets/
+
+# --- Harness 任务级暂存(完成即删,不跟踪) ---
+.scratch/
+
+# --- Spring Boot ---
+spring-boot-*.log
+
+# --- Docker ---
+# 镜像构建产物若临时落到仓库根可忽略;compose 文件本身跟踪
+docker-data/
