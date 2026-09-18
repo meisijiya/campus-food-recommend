@@ -6,7 +6,6 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
-import org.springframework.ai.chat.metadata.EmptyUsage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -64,10 +63,4 @@ public class MockChatModel implements ChatModel {
         ChatResponse response = call(new Prompt(List.of(messages)));
         return response.getResult().getOutput().getText();
     }
-
-    /**
-     * EmptyUsage 单例 — 兜底用,避免某些 Spring AI 内部默认 NullPointer。
-     */
-    @SuppressWarnings("unused")
-    private static final Usage FALLBACK_EMPTY = new EmptyUsage();
 }

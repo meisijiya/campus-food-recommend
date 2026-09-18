@@ -86,19 +86,6 @@ public class RecommendService {
         return new RecommendationResult(content, ctx.stage(), promptTokens, completionTokens);
     }
 
-    /**
-     * 直接跑一组 prompt,返回 promptTokens(给 evidence 脚本使用,不依赖会话状态)。
-     *
-     * @param fullPrompt 已组装好的完整 prompt
-     */
-    public int measurePromptTokens(String fullPrompt) {
-        List<Message> messages = List.of(new UserMessage(fullPrompt));
-        ChatResponse response = chatModel.call(new Prompt(messages));
-        Integer tokens = response.getMetadata() == null || response.getMetadata().getUsage() == null
-                ? null : response.getMetadata().getUsage().getPromptTokens();
-        return tokens == null ? 0 : tokens;
-    }
-
     /** 推荐响应。 */
     public record RecommendationResult(String content,
                                        com.meisijiya.campusfood.module.catalog.session.SessionStage stage,

@@ -64,6 +64,8 @@ public class SessionService {
         validateSid(sid);
         requireNonBlank(zoneId, "zoneId");
         SessionStage current = ensureStageAtLeast(sid, SessionStage.ZONE);
+        // Defense-in-depth: ensureStageAtLeast already validated the transition to ZONE,
+        // but kept so future refactors cannot bypass the slot↔stage invariant.
         stateMachine.validateSlot(current, SessionSlotStateMachine.Slot.ZONE);
         redis.opsForValue().set(zoneKey(sid), zoneId, SLOT_TTL_SECONDS, TimeUnit.SECONDS);
         // 写槽位后也要刷新 stage 的 TTL,确保后续 stage 仍是 INIT 时不会过早过期
