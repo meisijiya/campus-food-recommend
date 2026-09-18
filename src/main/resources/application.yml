@@ -12,11 +12,13 @@ spring:
       enabled: false
 
   # 数据源(占位 — F-1 用内存用户表,F-2 起才会接 Redis/查询 MySQL)
+  # driver-class-name 故意不写死:Spring Boot 3.5.16 会按 jdbc-url 自动推断
+  # (MySQL via compose env / H2 via 测试 scope / 其他按需扩展)
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:cfr;DB_CLOSE_DELAY=-1;MODE=MySQL}
     username: ${SPRING_DATASOURCE_USERNAME:sa}
     password: ${SPRING_DATASOURCE_PASSWORD:}
-    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.h2.Driver}
+    # 故意省略 driver-class-name,让 Spring Boot 由 url 推断(避免 fat jar 没有 H2 driver 时启动失败)
 
   jpa:
     hibernate:
@@ -36,6 +38,15 @@ spring:
     port: ${SPRING_RABBITMQ_PORT:5672}
     username: ${SPRING_RABBITMQ_USERNAME:guest}
     password: ${SPRING_RABBITMQ_PASSWORD:guest}
+
+  # Tomcat 线程池(Spring Boot 3.x 默认 max-threads=200,与 B-1 bullet 5000+ QPS 不匹配;
+  # F-1 evidence 采集阶段拉高,挡 reject;F-2/3/4 可按需下调)
+  tomcat:
+    threads:
+      max: 800
+      min-spare: 50
+    accept-count: 500
+    connection-timeout: 5s
 
   task:
     scheduling:

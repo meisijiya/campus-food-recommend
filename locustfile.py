@@ -18,7 +18,7 @@ Tag 注入方式说明(满足 ticket acceptance #12 字面要求):
         @tag("auth-only")
         class AuthOnlyUser(HttpUser): ...
 """
-from locust import HttpUser, task, between, events
+from locust import HttpUser, task, between, tag, events
 
 
 class AuthOnlyUser(HttpUser):
@@ -26,6 +26,7 @@ class AuthOnlyUser(HttpUser):
 
     wait_time = between(0, 0.01)  # 极短间隔逼出极限
 
+    @tag("auth-only")
     @task
     def health(self):
         self.client.get("/actuator/health", name="/actuator/health")
@@ -47,12 +48,14 @@ class RecommendUser(HttpUser):
         self.token = r.json()["accessToken"]
         self.headers = {"Authorization": f"Bearer {self.token}"}
 
+    @tag("recommend")
     @task(3)
     def init_session(self):
         self.client.post(
             "/api/session/init", headers=self.headers, name="/api/session/init"
         )
 
+    @tag("recommend")
     @task(1)
     def recommend(self):
         self.client.post(
@@ -77,6 +80,7 @@ class MixLikeDetailUser(HttpUser):
         # 选一个固定 merchantId 用于点赞(F-5 才用得到,F-1 阶段可能 404)
         self.merchant_id = "m-001"
 
+    @tag("mix-like-detail")
     @task
     def like(self):
         self.client.post(
@@ -85,6 +89,7 @@ class MixLikeDetailUser(HttpUser):
             name="/api/like/:merchantId",
         )
 
+    @tag("mix-like-detail")
     @task
     def merchant_detail(self):
         self.client.get(
@@ -94,24 +99,7 @@ class MixLikeDetailUser(HttpUser):
         )
 
 
-# tag 绑定(供 --tags 过滤)
-AuthOnlyUser.tasks = [health for health in AuthOnlyUser.tasks]
-RecommendUser.tasks = RecommendUser.tasks
-MixLikeDetailUser.tasks = MixLikeDetailUser.tasks
-
-
-# 让每个 User 类可以被打对应 tag
-for cls, tag in [
-    (AuthOnlyUser, "auth-only"),
-    (RecommendUser, "recommend"),
-    (MixLikeDetailUser, "mix-like-detail"),
-]:
-    existing = list(cls.tasks) if cls.tasks else []
-    cls.tasks = existing  # tasks 已包含 @task 标注的方法
-    setattr(cls, "tags", [tag])
-
-
-# 命令行入口(uv run locust -f locustfile.py 直接生效)
+# 命令行入口(python -m locust -f locustfile.py 直接生效)
 if __name__ == "__main__":
     import locust.main
     locust.main.main()

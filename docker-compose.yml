@@ -63,6 +63,8 @@ services:
     image: campus-food-recommend:0.1.0
     container_name: cfr-app
     restart: unless-stopped
+    ports:
+      - "8080:8080"  # 暴露给 host(locust 压测 / 本机调试)
     depends_on:
       mysql:
         condition: service_healthy
@@ -72,7 +74,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-campus_food}?useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-campus_food}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-cfr}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-cfr123}
       SPRING_DATA_REDIS_HOST: redis
