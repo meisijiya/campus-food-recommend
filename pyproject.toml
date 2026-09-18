@@ -1,0 +1,22 @@
+[project]
+name = "campus-food-recommend-bench"
+version = "0.1.0"
+description = "locust 压测脚本 — 见 ADR-0004"
+requires-python = ">=3.11"
+dependencies = [
+    "locust>=2.31",
+]
+
+[tool.locust]
+# locust 配置项(locust --config 模式可用)
+headless = true
+host = "http://localhost"
+users = 200
+spawn-rate = 50
+run-time = "30s"
+csv = "evidence/default"
+csv-full-history = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

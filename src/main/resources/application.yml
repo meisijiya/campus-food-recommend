@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: campus-food-recommend
+
+  # 默认 dev profile(MockChatModel 接管 Spring AI);bench profile 切真实 API
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  # Spring AI Alibaba DashScope 默认禁用;bench profile 通过 application-bench.yml 启用
+  ai:
+    dashscope:
+      enabled: false
+
+  # 数据源(占位 — F-1 用内存用户表,F-2 起才会接 Redis/查询 MySQL)
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:cfr;DB_CLOSE_DELAY=-1;MODE=MySQL}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.h2.Driver}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: ${SPRING_JPA_DIALECT:org.hibernate.dialect.H2Dialect}
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:guest}
+    password: ${SPRING_RABBITMQ_PASSWORD:guest}
+
+  task:
+    scheduling:
+      pool:
+        size: 2
+      thread-name-prefix: cfr-sched-
+
+# JWT 配置(从环境变量读,严禁硬编码)
+jwt:
+  issuer: campus-food-recommend
+  access-token-expiration: 7200000       # 2h
+  refresh-token-expiration: 1209600000   # 14d
+  secret: ${JWT_SECRET:change-me-this-is-a-development-only-secret-key-min-32-chars-please-rotate}
+
+# Actuator(暴露 health 给 LB / locust 5000 QPS 压测路径)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    # dev profile 不起 Redis/RabbitMQ;禁用 health indicator 避免聚合 DOWN
+    # bench / smoke profile(F-5 完成时)再启用
+    redis:
+      enabled: ${MANAGEMENT_HEALTH_REDIS:false}
+    rabbit:
+      enabled: ${MANAGEMENT_HEALTH_RABBIT:false}
+
+server:
+  port: 8080
+  compression:
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.meisijiya.campusfood: DEBUG
+    org.springframework.security: INFO

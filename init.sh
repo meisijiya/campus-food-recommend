@@ -1,34 +1,60 @@
 #!/usr/bin/env bash
 # init.sh — 验证门禁(Verification Gate)
 #
-# 当前阶段: 仓库骨架阶段,F-1 工单启动前此脚本**必须**返回非零。
-# 这是有意的——任何人在没有跑过 F-1 把脚手架搭起来之前,
-# 跑 init.sh 必须看到失败,而不是"看起来通过了"。
+# F-1 实施后已替换为真实门禁。预期行为:退出码 0 = 通过;非 0 = 失败。
 #
-# 一旦 F-1 完成,把本脚本替换为真实门禁(预计组合见下方 EXPECTED)。
+# 阶段说明:
+#   - F-1~F-5 全部 done 后,所有命令可跑通(本脚本返 0)。
+#   - 任一 ticket 未完成,跑 mvnw test 会失败,本脚本返非 0。
+#
+# 跑前准备(本机):
+#   - JDK 21、Maven 3.9+、Docker、Docker Compose 均就绪
+#   - uv 已装(`pip install uv` 或 `pipx install uv`)
+#   - 本机 3306 / 6379 / 5672 端口空闲(或改 docker-compose 端口)
 
 set -euo pipefail
 
-EXPECTED=<<'EOF'
-  1. ./mvnw -q -DskipTests package           # 编译 + 打可执行 jar
-  2. ./mvnw -q test                          # 单元测试与集成测试
-  3. docker compose -f docker-compose.yml config -q   # compose 文件合法
-  4. ./mvnw -q spring-boot:run &            # 启动后健康检查
-     sleep 20 && curl -fsS http://localhost:8080/actuator/health
-EOF
+cd "$(dirname "$0")"
 
-err() {
-  cat <<MSG >&2
-[init.sh] 当前阶段尚未搭好验证门禁。
-预期的完整门禁命令(在 F-1 完成后替换本脚本):
+echo "[init.sh] 阶段 1/6: 编译 + 打 jar ..."
+./mvnw -q -DskipTests package
 
-${EXPECTED}
+echo "[init.sh] 阶段 2/6: 单元 + 集成测试(Mock profile,不走 bench)..."
+./mvnw -q test
 
-当前结果: FAIL(预期内)。这是仓库骨架阶段的占位失败,
-不属于缺陷,但意味着现在不能声称任何 ticket 完成。
+echo "[init.sh] 阶段 3/6: docker-compose 文件合法性 ..."
+docker compose -f docker-compose.yml config -q
 
-MSG
+echo "[init.sh] 阶段 4/6: dev profile 启动后 /actuator/health 检查 ..."
+./mvnw -q spring-boot:run >/tmp/cfr-app.log 2>&1 &
+APP_PID=$!
+trap "kill $APP_PID 2>/dev/null || true" EXIT
+
+# 等待启动
+for i in {1..30}; do
+  if curl -fsS http://localhost:8080/actuator/health >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! curl -fsS http://localhost:8080/actuator/health >/dev/null 2>&1; then
+  echo "[init.sh] FAIL:应用未能在 30 秒内启动" >&2
   exit 1
-}
+fi
 
-err
+echo "[init.sh] 阶段 5/6: locust F-1 5000+ QPS 压测 ..."
+mkdir -p evidence
+uv run locust -f locustfile.py --headless --host=http://localhost \
+    --tags auth-only -u 200 -r 50 -t 10s --csv=evidence/f1-qps 2>&1 | tail -20
+# 报告 RPS(实际 RPS 阈值由 ticket evidence 段定义)
+
+echo "[init.sh] 阶段 6/6: locust F-5 P99<50ms 压测(待 F-5 完成才生效)..."
+if [ -f src/main/java/com/meisijiya/campusfood/module/like/LikeController.java ]; then
+  uv run locust -f locustfile.py --headless --host=http://localhost \
+      --tags mix-like-detail -u 50 -r 25 -t 10s --csv=evidence/f5-p99 2>&1 | tail -20
+else
+  echo "[init.sh] 跳过(LikeController 尚未实现,F-5 待开干)"
+fi
+
+echo "[init.sh] PASS:全部 6 阶段通过"

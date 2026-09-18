@@ -94,3 +94,26 @@ INIT → Zone → Cuisine → Merchant
 - 真正的机器学习推荐模型(简历强调"AI 个性化推荐",本 demo 用 Spring AI + 规则,模型部分以 Skill 模块封装的形式留口子)。
 - 多租户、多校区(单校区假设)。
 - 任何生产级可观测性(只用 Spring Boot Actuator 基础指标)。
+
+---
+
+## 9. Token 计量口径(对应 F-2 量化证据)
+
+| 项 | 取数来源 |
+|---|---|
+| Prompt token 数 | Spring AI `ChatResponse` 的 `metadata.usage.promptTokens`(百炼真实响应);Mock profile 下用 `MockChatModel` 自带的 token 估算器(基于 tiktoken 启发式按字符数 / 4 估算) |
+| Completion token 数 | 同上 `metadata.usage.completionTokens` |
+| F-2 量化证据 | 50 轮同任务对话,引入 Skill 模块前后 prompt token 数对比,降幅 ≥ 35% 即达标 |
+
+**纪律**:F-2 evidence 段必须同时给出两个数字(引入前 / 引入后),以及计算脚本路径(`tools/token-counter.py`)。
+
+---
+
+## 10. Profile 与 ChatModel(对应 F-3 双 Profile)
+
+| Profile | ChatModel 实现 | 何时启用 | 资源消耗 |
+|---|---|---|---|
+| `dev` / `test` / `it`(默认) | `MockChatModel`(自写规则式应答器,`config` 包内 `@Configuration @Profile("!bench & !smoke")`)| 不设 `SPRING_PROFILES_ACTIVE` 即默认 | 零 API 调用,零费用 |
+| `bench` / `smoke` | `DashScopeChatModel`(阿里云百炼,`spring-ai-alibaba-starter-dashscope` 1.1.2.2)| `SPRING_PROFILES_ACTIVE=bench ./mvnw spring-boot:run` | 走真实 API,产生 token 计费 |
+
+**纪律**:`./mvnw test` 与本地开发**禁止**启用 `bench` / `smoke` profile(用户 2026-09-18 Q2 明确"测试一定要先 mock 数据跑通,不然会造成金钱损失")。F-3 量化证据采集阶段才切真。

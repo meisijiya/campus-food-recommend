@@ -1,0 +1,17 @@
+# bench profile:启用阿里云百炼真实 API
+# 启动:SPRING_PROFILES_ACTIVE=bench ./mvnw spring-boot:run
+# 严禁在 mvnw test 默认跑(F-3 量化证据采集阶段才用)
+
+spring:
+  ai:
+    dashscope:
+      enabled: true
+      api-key: ${DASHSCOPE_API_KEY:}
+      chat:
+        options:
+          model: qwen-plus
+          temperature: 0.3
+
+logging:
+  level:
+    com.alibaba.cloud.ai: DEBUG

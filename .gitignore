@@ -47,3 +47,12 @@ spring-boot-*.log
 # --- Docker ---
 # 镜像构建产物若临时落到仓库根可忽略;compose 文件本身跟踪
 docker-data/
+
+# --- Python (locust 压测,见 ADR-0004) ---
+.venv/
+__pycache__/
+*.pyc
+uv.lock
+# 压测报告产物(每 ticket 自己出 csv 到 evidence/)
+evidence/*.csv
+evidence/**/*.csv

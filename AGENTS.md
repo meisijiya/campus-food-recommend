@@ -174,3 +174,68 @@ Local Markdown: 工单文件在 `.scratch/campus-food-recommend/issues/`,spec �
 ### Domain docs
 
 Single-context: 一份 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
+
+---
+
+## 16. Stack & Harness updates(2026-09-18 to-spec 沉淀后)
+
+> 本节是 to-spec / to-tickets 跑完后新增的约定,**与 §2-§9 不变量并列**;若冲突,以本节为准并回 §2-§9 修订。
+
+### 16.1 实际采用的技术栈
+
+| 维度 | 锁定值 | 决策来源 |
+|---|---|---|
+| JDK | **21 LTS** | ADR-0003(覆盖 ADR-0002 的 17) |
+| Spring Boot | 3.5.16 | ADR-0003 |
+| Spring AI Alibaba DashScope | 1.1.2.2 | ADR-0003 |
+| 中间件 | MySQL 8.4 / Redis 7.4 / RabbitMQ 3.13-mgmt(docker) | ADR-0003 |
+| 鉴权 | JJWT 0.12.6 | ADR-0002 |
+| Schema 校验 | networknt 1.5.2 | ADR-0003 |
+| 压测 | locust + uv venv | ADR-0004(替代 wrk) |
+
+### 16.2 Spring AI 双 Profile(不可省)
+
+| Profile | ChatModel | 启用方式 |
+|---|---|---|
+| `dev` / `test` / `it`(默认) | `MockChatModel`(`@Configuration @Profile("!bench & !smoke")`)| 不设 `SPRING_PROFILES_ACTIVE` 即可 |
+| `bench` / `smoke` | `DashScopeChatModel`(Spring AI Alibaba Starter 1.1.2.2)| `SPRING_PROFILES_ACTIVE=bench ./mvnw spring-boot:run` |
+
+**纪律**:百炼真实 API 仅在 `bench` / `smoke` profile 启用;`./mvnw test` 默认走 Mock,**禁止**在 CI / 本地测试阶段启用真实 API(避免金钱损失,用户在 2026-09-18 Q2 明确)。
+
+### 16.3 Python 压测工具链(locust + uv)
+
+- 仓根 `pyproject.toml` 锁 `locust>=2.31`;
+- 仓根 `locustfile.py` 定义三场景(用户对应三个 tag): `auth-only` / `recommend` / `mix-like-detail`;
+- `uv venv` 与 `uv sync` 装依赖;`.venv/` 入 `.gitignore`;
+- 跑压测统一前缀:`uv run locust -f locustfile.py --headless ...`;
+- 报告落 `evidence/<ticket>-<metric>.csv`,`.gitignore` 加 `evidence/*.csv`。
+
+### 16.4 工单拆分(dependency order)
+
+按 to-tickets 提议重拆,顺序即执行顺序;前 3 个 ticket 完成时停下 review:
+
+```
+F-1(无依赖)  →  F-2 / F-3 / F-4(互相独立)
+                              ↓
+                            F-5(依赖 F-1 + F-4)
+```
+
+### 16.5 spec 与 ticket 关系
+
+- spec 是单一真相源: `.scratch/campus-food-recommend/spec.md`(2026-09-18 重写);
+- 旧 5 ticket(`01-F1` ~ `05-F5`,在 to-spec 沉淀前占位创建)已删除;
+- 新 5 ticket 按 to-tickets 提议重写,文件名沿用 `0N-F<N>-<slug>.md` 风格;
+- spec 变更必须先改 spec.md,再调 ticket;ticket 变更必须先调 spec.md。
+
+---
+
+## 17. Active ADR 引用
+
+| ADR | 主题 | 状态 |
+|---|---|---|
+| 0001 | Tracker 模式 | 已采纳 |
+| 0002 | 技术栈与模块拆分(JDK 17 / 单 module)| **已被 0003 部分替代** |
+| 0003 | 版本表与 JDK 21 升级 | 已采纳 |
+| 0004 | locust 替代 wrk | 已采纳 |
+
+任何后续 ADR 直接追加,编号 `0005` 起;**ADR 只增不删**(§9)。

@@ -1,0 +1,110 @@
+# Docker Compose 一键起全套依赖 + 反向代理 + 应用
+# 启动顺序:mysql/redis/rabbitmq → app → nginx
+# 使用:docker compose up -d(本机 MySQL service 端口冲突时先 net stop MySQL)
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: cfr-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-campus_food}
+      MYSQL_USER: ${MYSQL_USER:-cfr}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-cfr123}
+    networks:
+      - cfr-net
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root123}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: cfr-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    networks:
+      - cfr-net
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: cfr-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-cfr}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-cfr123}
+    ports:
+      - "15672:15672"  # 管理界面
+    networks:
+      - cfr-net
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: campus-food-recommend:0.1.0
+    container_name: cfr-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-campus_food}?useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-cfr}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-cfr123}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-cfr}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-cfr123}
+      JWT_SECRET: ${JWT_SECRET:-change-me-this-is-a-development-only-secret-key-min-32-chars}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+    networks:
+      - cfr-net
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: cfr-nginx
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - cfr-net
+
+networks:
+  cfr-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
