@@ -1,2 +1,3 @@
 # Bench IT 落盘的量化 evidence — 跑 bench 时生成
-*.json
+# 仅 f3-compliance-rate.json 走 .gitignore;f2-token-reduction.json 由 F-2 工单显式入仓
+f3-compliance-rate.json

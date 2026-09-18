@@ -11,7 +11,6 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.stereotype.Component;
 
 import com.meisijiya.campusfood.common.TokenEstimator;
 
@@ -30,7 +29,6 @@ import com.meisijiya.campusfood.common.TokenEstimator;
  *
  * @author meisijiya
  */
-@Component
 public class MockChatModel implements ChatModel {
 
     private static final String MOCK_RECOMMENDATION = """

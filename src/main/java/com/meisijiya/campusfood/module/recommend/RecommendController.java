@@ -1,5 +1,6 @@
 package com.meisijiya.campusfood.module.recommend;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,6 +19,7 @@ import com.meisijiya.campusfood.common.ApiResponse;
  */
 @RestController
 @RequestMapping("/api/recommend")
+@PreAuthorize("isAuthenticated()")
 public class RecommendController {
 
     private final RecommendService recommendService;

@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -69,6 +70,7 @@ import com.meisijiya.campusfood.module.recommend.schema.JsonSchemaValidator;
 @AutoConfigureMockMvc
 @ActiveProfiles("bench")
 @EnabledIfEnvironmentVariable(named = "DASHSCOPE_API_KEY", matches = ".+")
+@DisabledIfEnvironmentVariable(named = "DASHSCOPE_API_KEY", matches = ".*", disabledReason = "Set DASHSCOPE_API_KEY env to enable bench profile compliance rate evidence")
 class RecommendBenchIT {
 
     /** 简历 bullet 目标:首次响应合规率 ≥ 88%。 */

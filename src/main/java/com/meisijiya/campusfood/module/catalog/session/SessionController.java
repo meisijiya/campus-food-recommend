@@ -3,6 +3,7 @@ package com.meisijiya.campusfood.module.catalog.session;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +23,7 @@ import com.meisijiya.campusfood.common.ApiResponse;
  */
 @RestController
 @RequestMapping("/api/session")
+@PreAuthorize("isAuthenticated()")
 public class SessionController {
 
     private final SessionService sessionService;

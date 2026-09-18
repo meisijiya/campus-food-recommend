@@ -93,8 +93,9 @@ public class ReflectiveRetryAdvisor implements BaseAdvisor {
         //   - 如果 RBFA 已替换 → fallback 必然合规 → 返回
         //   - 如果 RBFA 没替换(防御性) → 第二次仍不合规,继续返回原响应让上层兜底
         String secondContent = extractText(second);
-        if (secondContent != null && safeIsValid(secondContent)) {
-            return second;
+        if (secondContent != null && !safeIsValid(secondContent)) {
+            log.warn("ReflectiveRetryAdvisor: retry response failed schema validation; returning as-is. content={}",
+                    secondContent);
         }
         return second;
     }
