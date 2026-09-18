@@ -70,32 +70,30 @@
 
 ---
 
-## 6. Tracker 模式依赖与上游协调
+## 6. Tracker 模式与 Issue Tracker 路由
 
-本仓库采用 **Tracker 模式**,状态与依赖由工单系统承接,不在仓内写 `feature_list.json` / `progress.md`。
+本仓库采用 **Tracker 模式**,状态与依赖由 **Local Markdown** 工单系统承接。
 
-- **当前状态**: 上游 `matt` skill 尚未初始化 → `docs/agents/` 工单目录还不存在。
-- **本技能不创建工单文件**(`docs/agents/` 是 matt 上游的产物)。
-- **简历 5 条 bullet → 5 个 ticket 编号已在本文件中预留**: F-1 ~ F-5(见 §7)。
-- **下一步(用户执行)**: 在仓库根跑一次 matt 的初始化 skill(命令见后续回复),之后工单文件会被自动生成在 `docs/agents/`。在那之前,如需手动登记进度,只在 README 顶部加一段"待 matt 初始化"的临时状态。
-- **matt 跑完后**:
-  - `docs/agents/` 下生成 `F-1` ~ `F-5` 工单 md。
-  - 工单文件 = 状态来源。状态变更、改 evidence、关 ticket 都改工单。
-  - AGENTS.md 本节作为路由指引长期保留。
+- **Tracker 配置**: `docs/agents/issue-tracker.md`、`docs/agents/triage-labels.md`、`docs/agents/domain.md`(均由 `mattpocock-skills:setup-matt-pocock-skills` 生成)。
+- **工单落点**: `.scratch/campus-food-recommend/issues/0N-FN-<slug>.md`(已建好 F-1 ~ F-5)。
+- **spec 落点**: `.scratch/campus-food-recommend/spec.md`。
+- **状态行**: 工单顶部 `Status:` 是 **triage role**(needs-triage / needs-info / ready-for-agent / ready-for-human / wontfix);工程进度写工单 body 内 `## 工程进度` 段。
+- **不写** `feature_list.json` / `progress.md`(Tracker 模式不在仓内)。
+- **.scratch/ 受 git 忽略**:见 §8 + `.gitignore`。工单与仓内 tracked 文件物理隔离。
 
 ---
 
 ## 7. 简历 bullet → ticket 映射
 
-| ticket | bullet 一句话 | 状态 |
-|---|---|---|
-| F-1 | 面向扩缩容的无状态架构(JWT + Docker Compose + Nginx) | 待启动 |
-| F-2 | 会话槽位约束的渐进式检索(Redis 会话状态 + Skill 模块) | 待启动 |
-| F-3 | 结构化输出与反思重试(JSON Schema + AI 自反思) | 待启动 |
-| F-4 | 离线数据加工与缓存预热(Spring Task + 层级 JSON + Redis 分片) | 待启动 |
-| F-5 | 缓存一致性与多级加速(Redis 原子 + RabbitMQ + Caffeine) | 待启动 |
+| ticket | bullet 一句话 | 工单路径 | triage status |
+|---|---|---|---|
+| F-1 | 面向扩缩容的无状态架构(JWT + Docker Compose + Nginx) | `.scratch/campus-food-recommend/issues/01-F1-stateless-jwt.md` | ready-for-agent |
+| F-2 | 会话槽位约束的渐进式检索(Redis 会话状态 + Skill 模块) | `.scratch/campus-food-recommend/issues/02-F2-session-slot.md` | ready-for-agent |
+| F-3 | 结构化输出与反思重试(JSON Schema + AI 自反思) | `.scratch/campus-food-recommend/issues/03-F3-structured-output.md` | ready-for-agent |
+| F-4 | 离线数据加工与缓存预热(Spring Task + 层级 JSON + Redis 分片) | `.scratch/campus-food-recommend/issues/04-F4-offline-preheat.md` | ready-for-agent |
+| F-5 | 缓存一致性与多级加速(Redis 原子 + RabbitMQ + Caffeine) | `.scratch/campus-food-recommend/issues/05-F5-cache-consistency.md` | ready-for-agent |
 
-F-1 必须先做(其他 ticket 都依赖它建好的工程脚手架与鉴权骨架)。F-2 ~ F-5 之间互相解耦,可按任意顺序推进。
+F-1 必须先做(其他 ticket 都依赖它建好的工程脚手架与鉴权骨架)。F-2 ~ F-5 之间互相解耦,可按任意顺序推进;F-5 强依赖 F-4 的缓存层。
 
 ---
 
@@ -160,3 +158,19 @@ F-1 必须先做(其他 ticket 都依赖它建好的工程脚手架与鉴权骨�
 2. `bash init.sh` — 必须退出非零(脚手架阶段),退出 0 才是有效完成态。
 3. 读最新一个 `status: in-progress` 工单;无则在工单系统里选下一个 `pending` 工单转 `in-progress`。
 4. 在 `.scratch/handoff/` 检查最近一次会话的 handoff(若存在)。
+
+## 15. Agent skills(由 matt setup 注入)
+
+本节由 `mattpocock-skills:setup-matt-pocock-skills` 在 2026-09-18 初始化写入。后续若切换工单系统或重启,在此更新。
+
+### Issue tracker
+
+Local Markdown: 工单文件在 `.scratch/campus-food-recommend/issues/`,spec 在 `.scratch/campus-food-recommend/spec.md`。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+默认五个: `needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+Single-context: 一份 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
