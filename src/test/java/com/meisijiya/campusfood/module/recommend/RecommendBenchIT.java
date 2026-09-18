@@ -18,7 +18,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -69,8 +68,11 @@ import com.meisijiya.campusfood.module.recommend.schema.JsonSchemaValidator;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("bench")
+// 当 DASHSCOPE_API_KEY 缺失时,默认 mvn -B test 自动 skip(避免百炼 API 计费);
+// 用户 export DASHSCOPE_API_KEY 后再跑 SPRING_PROFILES_ACTIVE=bench mvn -B test -Dtest=RecommendBenchIT 取真证据。
+// 注:本 ticket fix round 1 曾错误地用 @DisabledIfEnvironmentVariable(matches=".*") companion,导致
+// BenchIT 永远 disabled(连 key 存在时也跳),已 revert。仅保留 @EnabledIfEnvironmentVariable。
 @EnabledIfEnvironmentVariable(named = "DASHSCOPE_API_KEY", matches = ".+")
-@DisabledIfEnvironmentVariable(named = "DASHSCOPE_API_KEY", matches = ".*", disabledReason = "Set DASHSCOPE_API_KEY env to enable bench profile compliance rate evidence")
 class RecommendBenchIT {
 
     /** 简历 bullet 目标:首次响应合规率 ≥ 88%。 */
