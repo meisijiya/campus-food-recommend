@@ -65,11 +65,17 @@ jobs:
           .venv/bin/locust --version
 
       - name: Locust dry-run(语法 / 导入校验,不真发请求)
-        # --collect-only 让 locust 实例化所有 User 类并打印统计,但不启动负载生成
-        # 适配 GitHub Ubuntu runner 无 cfr-app 实例的现实;仅校验 locustfile_mix.py 可导入
+        # locust 2.x 已移除 --collect-only;改用 python import 校验 locustfile_mix 可导入
+        # locustfile_mix.py 第 12 行 `from locustfile import MixLikeDetailUser` 触发 User 类注册
+        # 适配 GitHub Ubuntu runner 无 cfr-app 实例的现实;CI 只校验语法 / 导入,不真发请求
         run: |
           mkdir -p evidence
-          .venv/bin/locust -f locustfile_mix.py --collect-only 2>&1 | tee evidence/locust-main.log
+          .venv/bin/python -c "
+import sys
+sys.path.insert(0, '.')
+import locustfile_mix  # noqa  -- this also imports locustfile (User registration side-effect)
+print('locustfile_mix.py imports OK; User classes registered; locust env ready')
+" 2>&1 | tee evidence/locust-main.log
         continue-on-error: false
 
       - name: Audit commit messages(最近 20 commit 必须含 [F-N] 前缀)

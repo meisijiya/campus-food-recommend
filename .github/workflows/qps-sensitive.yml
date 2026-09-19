@@ -48,10 +48,16 @@ jobs:
           uv venv .venv
           uv pip install --python .venv/bin/python locust
 
-      - name: Locust dry-run (--collect-only) smoke
+      # locust 2.x 已移除 --collect-only;改用 python import 校验
+      - name: Locust smoke (import validation)
         run: |
           mkdir -p evidence
-          .venv/bin/locust -f locustfile_mix.py --collect-only 2>&1 | tee evidence/locust-qps-smoke.log
+          .venv/bin/python -c "
+import sys
+sys.path.insert(0, '.')
+import locustfile_mix  # noqa
+print('locustfile_mix.py imports OK; User classes registered')
+" 2>&1 | tee evidence/locust-qps-smoke.log
 
       - name: Upload locust smoke log
         if: always()
