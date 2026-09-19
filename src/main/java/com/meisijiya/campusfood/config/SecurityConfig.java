@@ -47,7 +47,10 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/actuator/health",
                                 "/actuator/health/**",
-                                "/actuator/info"
+                                "/actuator/info",
+                                // F-4 凌晨预热手动触发端点(仅 dev profile 存在 controller);
+                                // 见 PreheatAdminController 的 @Profile("dev") 注释
+                                "/admin/preheat/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

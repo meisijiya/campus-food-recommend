@@ -24,8 +24,11 @@ spring:
     hibernate:
       ddl-auto: update
     properties:
+      # F-4 修复:Hibernate 6 在 MySQL 8.4 启动时查 information_schema.SEQUENCES(MySQL 无此表)失败
+      # 关掉 legacy sequence extractor 跳过该 metadata 查询,改走 dialect 自带的 identity 检测路径
       hibernate:
         dialect: ${SPRING_JPA_DIALECT:org.hibernate.dialect.H2Dialect}
+      "[hibernate.boot.allow_jdbc_metadata_access]": "false"
 
   data:
     redis:

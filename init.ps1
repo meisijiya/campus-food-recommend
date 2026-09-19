@@ -40,7 +40,9 @@ if ($LASTEXITCODE -ne 0) { Write-Host "[init.sh] FAIL:compose 文件" ; exit 1 }
 Write-Host "[init.sh] 阶段 4/6: dev profile 启动后 /actuator/health 检查 ..."
 $alreadyUp = $false
 try {
-    $null = Invoke-WebRequest -Uri "http://localhost:8080/actuator/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+    # 用 127.0.0.1 而非 localhost:Windows 把 localhost 优先解析为 IPv6(::1),
+    # 但 cfr-app 仅绑定 IPv4 0.0.0.0:8080,IPv6 访问会超时
+    $null = Invoke-WebRequest -Uri "http://127.0.0.1:8080/actuator/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
     $alreadyUp = $true
 } catch { }
 
@@ -52,7 +54,7 @@ if ($alreadyUp) {
     $ok = $false
     for ($i = 0; $i -lt 90; $i++) {
         try {
-            $null = Invoke-WebRequest -Uri "http://localhost:8080/actuator/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+            $null = Invoke-WebRequest -Uri "http://127.0.0.1:8080/actuator/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
             $ok = $true; break
         } catch { Start-Sleep -Seconds 1 }
     }

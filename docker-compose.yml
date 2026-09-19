@@ -75,6 +75,8 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-campus_food}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      # F-4:Hibernate 6 + MySQL 8.4 启动时切到 MySQLDialect,避免 information_schema.SEQUENCES 查询失败
+      SPRING_JPA_DIALECT: org.hibernate.dialect.MySQLDialect
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-cfr}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-cfr123}
       SPRING_DATA_REDIS_HOST: redis
