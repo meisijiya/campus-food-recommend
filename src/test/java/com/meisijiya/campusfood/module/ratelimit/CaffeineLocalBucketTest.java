@@ -145,14 +145,15 @@ class CaffeineLocalBucketTest {
     }
 
     @Test
-    void tryAcquire_negativePermits_throws() {
-        // permits < 0 抛 IllegalArgumentException(避免 token 漂移)
+    void tryAcquire_negativeOrZeroPermits_isAlwaysAllowed() {
+        // orchestrator 协调版契约:permits <= 0 都按"放行"语义处理(不抛异常,也不消耗 token)
+        // 接口层 default tryAcquire(key) → tryAcquire(key, 1),所以 0 / 负数 是"noop"路径。
         CaffeineLocalBucket bucket = new CaffeineLocalBucket(1, 0.0001);
-        try {
-            bucket.tryAcquire("k", -1);
-            org.junit.jupiter.api.Assertions.fail("should have thrown for negative permits");
-        } catch (IllegalArgumentException expected) {
-            // ok
-        }
+        // 0-permit:不消耗 token,真实 token 1 还在
+        assertTrue(bucket.tryAcquire("k1", 0));
+        assertTrue(bucket.tryAcquire("k1", 1));
+        // 负数:也按放行(虽然接口层不会传负数,但实现层宽容)
+        assertTrue(bucket.tryAcquire("k2", -1));
+        assertTrue(bucket.tryAcquire("k2", 1));
     }
 }

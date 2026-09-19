@@ -1,6 +1,7 @@
 package com.meisijiya.campusfood.config;
 
 import com.meisijiya.campusfood.common.JsonAuthenticationEntryPoint;
+import com.meisijiya.campusfood.module.ratelimit.RateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -34,6 +35,9 @@ import java.util.Arrays;
  * <p>注意:不要在构造器注入 {@code JwtAuthenticationFilter} / {@code JsonAuthenticationEntryPoint},
  * 否则会与 {@code UserDetailsServiceImpl} 触发循环依赖(JwtFilter → UserDetailsService → PasswordEncoder → SecurityConfig)。
  *
+ * <p>F-7:在 JwtAuthenticationFilter 之前多注册 {@link RateLimitFilter},优先做双层令牌桶校验。
+ * RateLimitFilter 看到的是未鉴权请求,因此自己解析 Bearer 抽 sid(不依赖 SecurityContext)。
+ *
  * @author meisijiya
  */
 @Configuration
@@ -50,6 +54,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtAuthenticationFilter jwtAuthenticationFilter,
+            RateLimitFilter rateLimitFilter,
             JsonAuthenticationEntryPoint authenticationEntryPoint,
             Environment env) throws Exception {
         boolean isDevProfile = isDevProfileActive(env);
@@ -65,6 +70,9 @@ public class SecurityConfig {
                                 // F-6 demo-readiness:显式放行 liveness/readiness 探针
                                 "/actuator/health/liveness",
                                 "/actuator/health/readiness",
+                                // F-9 W2:放行 Prometheus scrape 端点(内网/Prometheus 自己访问,无需鉴权;
+                                // 数据已由 management 暴露白名单收敛到 metrics + prometheus)
+                                "/actuator/prometheus",
                                 // F-4 review fix:/actuator/info 不再默认 permitAll(防止未来 info.* 配置
                                 // 引入 git/build/env 泄露);要走鉴权
                                 "/admin/preheat/**"
@@ -82,6 +90,8 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authenticationEntryPoint))
+                // F-7:限流过滤器必须在 JwtAuthenticationFilter 之前 — 这样 anonymous 桶 key 才能拿到原始 Bearer token 自己解 sid(不依赖 SecurityContext)。
+                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

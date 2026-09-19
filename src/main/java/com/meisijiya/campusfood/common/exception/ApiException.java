@@ -16,6 +16,15 @@ public class ApiException extends RuntimeException {
         this.status = status;
     }
 
+    /**
+     * F-7 helper:429 限流异常工厂。{@code RateLimitFilter} 本身不抛(避免被
+     * {@code GlobalExceptionHandler} 吃成 500),仅在 Controller 层需要"业务维度"
+     * 拒绝时使用此工厂抛 {@code ApiException}。Filter 侧直接写 response。
+     */
+    public static ApiException rateLimited(String message) {
+        return new ApiException(HttpStatus.TOO_MANY_REQUESTS, message);
+    }
+
     public HttpStatus status() {
         return status;
     }

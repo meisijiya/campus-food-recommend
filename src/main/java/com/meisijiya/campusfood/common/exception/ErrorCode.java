@@ -19,4 +19,11 @@ public final class ErrorCode {
     public static final int BAD_REQUEST = 40000;
     /** 业务错误(默认 catch-all)。 */
     public static final int BUSINESS_ERROR = 50000;
+    /**
+     * 限流拒绝(F-7)— 双层令牌桶任一层拒绝时返 HTTP 429,body code=42900。
+     * <p>HTTP status 仍为 429(由 {@code RateLimitFilter} 直接写入 response),
+     * 走 {@code ApiException} 路径会让 Spring 返回 500,因此 Filter 不抛异常,
+     * 仅参考本常量生成 JSON 响应体。
+     */
+    public static final int RATE_LIMITED = 42900;
 }
