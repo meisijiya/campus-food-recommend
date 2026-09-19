@@ -22,7 +22,10 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 import com.meisijiya.campusfood.common.exception.ApiException;
+import com.meisijiya.campusfood.config.MicrometerConfig;
 import com.meisijiya.campusfood.config.RabbitMQConfig;
 
 /**
@@ -42,6 +45,7 @@ class LikeServiceTest {
     private StringRedisTemplate redis;
     private ValueOperations<String, String> ops;
     private RabbitTemplate rabbit;
+    private MicrometerConfig micrometerConfig;
     private LikeService service;
 
     @BeforeEach
@@ -49,8 +53,14 @@ class LikeServiceTest {
         redis = mock(StringRedisTemplate.class);
         ops = mock(ValueOperations.class);
         rabbit = mock(RabbitTemplate.class);
+        // F-9 W1:LikeService 构造器追加 MicrometerConfig;测试用 SimpleMeterRegistry 注入,
+        // MicrometerConfig 自身的 PostConstruct 占位 Gauge 不影响 counter 测试(不需要 counter
+        // 走 MicrometerConfig 的 builder.register() 路径,因为 LikeService.like() 内直接调
+        // micrometerConfig.likeCounter("like").increment(),底层 meter 是 SimpleMeterRegistry 的)。
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        micrometerConfig = new MicrometerConfig(meterRegistry);
         when(redis.opsForValue()).thenReturn(ops);
-        service = new LikeService(redis, rabbit);
+        service = new LikeService(redis, rabbit, micrometerConfig);
     }
 
     @Test

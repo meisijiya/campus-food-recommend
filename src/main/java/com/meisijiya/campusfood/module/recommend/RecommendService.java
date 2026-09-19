@@ -10,9 +10,13 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import io.micrometer.core.instrument.Timer;
+
 import com.meisijiya.campusfood.common.TokenEstimator;
+import com.meisijiya.campusfood.config.MicrometerConfig;
 import com.meisijiya.campusfood.module.catalog.session.SessionContext;
 import com.meisijiya.campusfood.module.catalog.session.SessionService;
 
@@ -52,13 +56,24 @@ public class RecommendService {
     private final ChatClient recommendChatClient;
     private final SkillRegistry skillRegistry;
     private final SessionService sessionService;
+    private final MicrometerConfig micrometerConfig;
+    /**
+     * 当前激活的 Spring profile 名 — 用来区分推荐路径:
+     * bench/smoke → {@code dashscope};其余(含 dev/test/it)→ {@code mock}.
+     * F-3 §16.2 锁定该映射;这里读 {@code spring.profiles.active} 是 Spring 提供,默认空串即非 bench。
+     */
+    private final String activeProfile;
 
     public RecommendService(ChatClient recommendChatClient,
                             SkillRegistry skillRegistry,
-                            SessionService sessionService) {
+                            SessionService sessionService,
+                            MicrometerConfig micrometerConfig,
+                            @Value("${spring.profiles.active:}") String activeProfile) {
         this.recommendChatClient = recommendChatClient;
         this.skillRegistry = skillRegistry;
         this.sessionService = sessionService;
+        this.micrometerConfig = micrometerConfig;
+        this.activeProfile = activeProfile == null ? "" : activeProfile;
     }
 
     /**
@@ -77,7 +92,12 @@ public class RecommendService {
         );
         Prompt prompt = new Prompt(messages);
 
+        // F-9 W1:Timer.Sample 包裹 chat call,记录 latency 到 recommend_latency_seconds。
+        // hit_tier 三态:fallback(规则降级接管)/ mock(MockChatModel 命中)/ dashscope(bench profile 真实调用)。
+        // fallback 通过 content 包含"降级推荐"识别 — RuleBasedFallbackAdvisor.buildFallbackJson() 的稳定字符串。
+        Timer.Sample sample = Timer.start(micrometerConfig.meterRegistry());
         ChatResponse response = recommendChatClient.prompt(prompt).call().chatResponse();
+        sample.stop(micrometerConfig.recommendTimer("recommend", resolveHitTier(response)));
 
         String content = response.getResult().getOutput().getText();
         Integer promptTokens = response.getMetadata() == null || response.getMetadata().getUsage() == null
@@ -86,6 +106,20 @@ public class RecommendService {
                 ? null : response.getMetadata().getUsage().getCompletionTokens();
 
         return new RecommendationResult(content, ctx.stage(), promptTokens, completionTokens);
+    }
+
+    /**
+     * hit_tier 判定:F-3 advisor 链在第二次重试不合规时由 {@code RuleBasedFallbackAdvisor}
+     * 接管,产出的 content 含稳定字符串 "降级推荐";否则按当前 profile 区分 mock / dashscope。
+     */
+    private String resolveHitTier(ChatResponse response) {
+        String content = response == null || response.getResult() == null
+                || response.getResult().getOutput() == null
+                ? "" : response.getResult().getOutput().getText();
+        if (content != null && content.contains("降级推荐")) {
+            return "fallback";
+        }
+        return activeProfile.contains("bench") ? "dashscope" : "mock";
     }
 
     /** 推荐响应。 */

@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import com.meisijiya.campusfood.common.exception.ApiException;
+import com.meisijiya.campusfood.config.MicrometerConfig;
 import com.meisijiya.campusfood.config.RabbitMQConfig;
 
 /**
@@ -59,10 +60,14 @@ public class LikeService {
 
     private final StringRedisTemplate redis;
     private final RabbitTemplate rabbit;
+    private final MicrometerConfig micrometerConfig;
 
-    public LikeService(StringRedisTemplate redis, RabbitTemplate rabbit) {
+    public LikeService(StringRedisTemplate redis,
+                       RabbitTemplate rabbit,
+                       MicrometerConfig micrometerConfig) {
         this.redis = redis;
         this.rabbit = rabbit;
+        this.micrometerConfig = micrometerConfig;
     }
 
     /**
@@ -93,6 +98,10 @@ public class LikeService {
         LikeMessage message = new LikeMessage(studentId, merchantId, Instant.now());
         rabbit.convertAndSend(RabbitMQConfig.QUEUE_LIKE_DB_WRITE, message);
         log.info("LikeService liked studentId={} merchantId={} createdAt={}", studentId, merchantId, message.createdAt());
+        // F-9 W1:业务指标 like_count_total 自增 — 只在首次成功路径打点,幂等命中不计。
+        // 这里 Counter 来自 MicrometerConfig.likeCounter():tag endpoint=like。
+        // F-8 W2 在更外层加 RedisLock.tryLock/finally;Counter 调用被锁内,不会因 retry 重复 +1。
+        micrometerConfig.likeCounter("like").increment();
         return true;
     }
 
