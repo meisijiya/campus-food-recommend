@@ -38,8 +38,10 @@ jobs:
 
       # 走 MockChatModel profile(AGENTS.md §16.2),无需中间件;
       # -DskipBenchITs 跳过 bench profile IT(避免触发真实 DashScope API)
+      # -DskipITs 跳过所有 *IT(LikeServiceIT 需 RabbitMQ 等);
+      #   Ubuntu runner 不起中间件,完整 IT 留给本机 init.ps1
       - name: Build + test (mock profile)
-        run: mvn -B verify -DskipBenchITs
+        run: mvn -B verify -DskipITs -DskipBenchITs
 
       # locust 走 uv 安装(AGENTS.md §16.3 + ADR-0004);
       # CI runner 默认不带 uv,先 pip 装 uv,再 uv pip --system 装 locust

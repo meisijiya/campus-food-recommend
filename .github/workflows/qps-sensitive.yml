@@ -35,7 +35,9 @@ jobs:
           cache: maven
 
       - name: Build + test (mock profile)
-        run: mvn -B verify -DskipBenchITs
+        # -DskipITs 跳过所有 *IT(需 RabbitMQ/Redis,Ubuntu runner 不起);
+        # -DskipBenchITs 跳过 bench profile IT(避免触发真实 DashScope API)
+        run: mvn -B verify -DskipITs -DskipBenchITs
 
       - name: Install uv
         run: pip install --upgrade uv

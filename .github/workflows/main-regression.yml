@@ -43,10 +43,13 @@ jobs:
           java-version: '21'
           cache: 'maven'  # key 默认基于 **/pom.xml hash
 
-      - name: Build + test(Mock profile,跳过 bench IT)
+      - name: Build + test(Mock profile,跳过 IT 与 bench IT)
         # MockChatModel 默认 profile:dev/test/it,无需百炼 API key,避免金钱损失
         # -DskipBenchITs 显式排除 *BenchIT(需 SPRING_PROFILES_ACTIVE=bench)
-        run: mvn -B verify -DskipBenchITs
+        # -DskipITs 跳过所有 *IT(LikeServiceIT 需 RabbitMQ、RateLimitIT 需 Redis 等),
+        #   Ubuntu runner 不起中间件(详见 README §3 / ADR-0007 §F-10 排除范围);
+        #   完整 IT 留给本机 init.ps1 阶段 2(Mock profile 走 testcontainers)
+        run: mvn -B verify -DskipITs -DskipBenchITs
 
       - name: Install uv
         run: pip install uv
