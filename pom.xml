@@ -183,7 +183,7 @@
                         <exclude>com/meisijiya/campusfood/module/recommend/advisor/RuleBasedFallbackAdvisorTest.java</exclude>
                         <exclude>com/meisijiya/campusfood/module/preheat/HeatJobPreheaterIT.java</exclude>
                         <exclude>com/meisijiya/campusfood/module/lock/DistributedLockIT.java</exclude>
-                        <exclude>com/meisijiya/campusfood/observability/**/*.java</exclude>
+                        <!-- F-9 W3:observability exclusion 由 W3 worker 移除(注释指引),让 ObservabilityIT 编译并由 failsafe 跑。 -->
                     </testExcludes>
                 </configuration>
             </plugin>

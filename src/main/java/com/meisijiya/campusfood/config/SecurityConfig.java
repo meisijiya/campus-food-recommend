@@ -91,8 +91,12 @@ public class SecurityConfig {
                 )
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authenticationEntryPoint))
                 // F-7:限流过滤器必须在 JwtAuthenticationFilter 之前 — 这样 anonymous 桶 key 才能拿到原始 Bearer token 自己解 sid(不依赖 SecurityContext)。
-                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
+                // F-9 W3 顺序修正:addFilterBefore 内部从 FilterOrderRegistration 查 registeredFilter 的 order,
+                // 必须先注册 JwtAuthenticationFilter(放到 UsernamePasswordAuthenticationFilter 之前),
+                // 再注册 RateLimit(放到 JwtAuthenticationFilter 之前)— 否则 RateLimit 注册时 JwtAuthenticationFilter
+                // 尚未进 FilterOrderRegistration,会抛 "does not have a registered order"。
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
                 .build();
     }
 

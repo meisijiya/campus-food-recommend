@@ -25,6 +25,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.meisijiya.campusfood.common.exception.ApiException;
 import com.meisijiya.campusfood.config.MicrometerConfig;
 import com.meisijiya.campusfood.config.RabbitMQConfig;
+import com.meisijiya.campusfood.module.lock.RedisLock;
 
 /**
  * {@link LikeService} 业务指标单元测试(F-9 W1)。
@@ -47,6 +48,7 @@ class LikeServiceMetricsTest {
     private StringRedisTemplate redis;
     private ValueOperations<String, String> ops;
     private RabbitTemplate rabbit;
+    private RedisLock redisLock;
     private MeterRegistry meterRegistry;
     private MicrometerConfig micrometerConfig;
     private LikeService service;
@@ -56,11 +58,15 @@ class LikeServiceMetricsTest {
         redis = mock(StringRedisTemplate.class);
         ops = mock(ValueOperations.class);
         rabbit = mock(RabbitTemplate.class);
+        // F-9 W3:RedisLock 在 LikeService 构造器里成为第 4 个依赖(F-8 W2 分布式锁改造);
+        // 单测不需要真实锁语义,直接 mock 让 tryLock 返 true + release 不抛。
+        redisLock = mock(RedisLock.class);
+        when(redisLock.tryLock(anyString(), anyString(), org.mockito.ArgumentMatchers.anyLong())).thenReturn(true);
         // F-9 W1:SimpleMeterRegistry 在内存维护 Counter,find().count() 直接断言。
         meterRegistry = new SimpleMeterRegistry();
         micrometerConfig = new MicrometerConfig(meterRegistry);
         when(redis.opsForValue()).thenReturn(ops);
-        service = new LikeService(redis, rabbit, micrometerConfig);
+        service = new LikeService(redis, rabbit, micrometerConfig, redisLock);
     }
 
     @Test
