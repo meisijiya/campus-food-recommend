@@ -1,0 +1,66 @@
+name: PR Smoke (mvn verify + locust dry-run)
+
+# 触发: PR open / synchronize / reopen
+# 范围: 仅 mvn -B verify(mock profile)+ locust --collect-only(语法预热)。
+#       PR 环境不起 app、不接 mysql/redis/rabbitmq(ubuntu runner 拉镜像 + 起容器太慢,
+#       违背 8 分钟 timeout),故 locust 仅做 dry-run,不真打 8080。
+# 真正的 locust F-5 验收在 init.ps1 阶段 6(本地)与 main-regression(后续 ticket)。
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# 同一 PR 新 push 自动取消上一次 in-flight run,节省 runner minutes
+concurrency:
+  group: pr-smoke-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# 最小权限:仅读仓内容(workflow 自身不需 push/write)
+permissions:
+  contents: read
+
+jobs:
+  mvn-verify:
+    name: mvn verify + locust dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # JDK 21 LTS(Temurin 发行版),内置 cache: maven 自动缓存 ~/.m2/repository,
+      # 第二次 PR 跑 < 3 分钟(参见 AGENTS.md §16.1)
+      - name: Set up JDK 21 (Temurin) + Maven cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # 走 MockChatModel profile(AGENTS.md §16.2),无需中间件;
+      # -DskipBenchITs 跳过 bench profile IT(避免触发真实 DashScope API)
+      - name: Build + test (mock profile)
+        run: mvn -B verify -DskipBenchITs
+
+      # locust 走 uv 安装(AGENTS.md §16.3 + ADR-0004);
+      # CI runner 默认不带 uv,先 pip 装 uv,再 uv pip --system 装 locust
+      - name: Install uv
+        run: pip install --upgrade uv
+
+      - name: Install locust (uv, system)
+        run: uv pip install --system locust
+
+      # PR smoke 不起 app,只验证 locustfile_mix.py 语法 OK + 装好环境。
+      # --collect-only 让 locust 加载 User 类但不调度任何请求
+      - name: Locust dry-run (--collect-only) smoke
+        run: |
+          mkdir -p evidence
+          locust -f locustfile_mix.py --collect-only 2>&1 | tee evidence/locust-pr-smoke.log
+
+      # 始终上传,即使前面失败(便于事后排查)
+      - name: Upload locust smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: locust-pr-smoke
+          path: evidence/locust-pr-smoke.log
+          retention-days: 7

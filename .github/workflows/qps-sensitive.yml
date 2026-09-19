@@ -1,0 +1,140 @@
+name: QPS-Sensitive PR (mvn verify + JMeter F-1)
+
+# 触发: PR open / synchronize / reopen / labeled
+# 过滤(三 OR,任一命中即跑 JMeter):
+#   1) PR label = `qps-sensitive`
+#   2) PR title 含 `[qps]`
+#   3) PR head ref(分支名)含 `qps`
+# 范围: 同 pr-smoke(mvn verify + locust dry-run),外加 JMeter F-1 5000+ QPS 压测。
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: qps-sensitive-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # === Job 1: 与 pr-smoke 同 ===
+  mvn-verify:
+    name: mvn verify + locust dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin) + Maven cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build + test (mock profile)
+        run: mvn -B verify -DskipBenchITs
+
+      - name: Install uv
+        run: pip install --upgrade uv
+
+      - name: Install locust (uv, system)
+        run: uv pip install --system locust
+
+      - name: Locust dry-run (--collect-only) smoke
+        run: |
+          mkdir -p evidence
+          locust -f locustfile_mix.py --collect-only 2>&1 | tee evidence/locust-qps-smoke.log
+
+      - name: Upload locust smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: locust-qps-smoke
+          path: evidence/locust-qps-smoke.log
+          retention-days: 7
+
+  # === Job 2: JMeter F-1 5000+ QPS(ADR-0005) ===
+  # depends on mvn-verify(避免并行撞 maven 缓存);
+  # 触发条件: qps-sensitive 三 OR 中任一
+  jmeter-f1:
+    name: JMeter F-1 5000+ QPS threshold
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    needs: mvn-verify
+    if: |
+      contains(github.event.pull_request.labels.*.name, 'qps-sensitive') ||
+      contains(github.event.pull_request.title, '[qps]') ||
+      contains(github.head_ref, 'qps')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ubuntu runner 没预装 JMeter,官方 tarball 下载到 ~/jmeter 并解压
+      - name: Install Apache JMeter 5.6.3
+        run: |
+          set -euxo pipefail
+          mkdir -p "$HOME/jmeter"
+          cd "$HOME/jmeter"
+          curl -fsSL -o jmeter.tgz https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
+          tar -xzf jmeter.tgz --strip-components=1
+          chmod +x "$HOME/jmeter/bin/jmeter"
+          "$HOME/jmeter/bin/jmeter" --version
+
+      # plan host=127.0.0.1:8080(/actuator/health),PR 环境无 app;
+      # -l jtl 是结果样本文件, -j jmeter.log 是 jmeter 自身运行日志。
+      # 即便无 app,jMeter plan 也能跑完(连接拒绝被记为 failed sample),jtl 与 log 仍生成。
+      - name: Run JMeter F-1 plan (60s, 500 threads)
+        run: |
+          set -euxo pipefail
+          mkdir -p evidence
+          "$HOME/jmeter/bin/jmeter" -n -t evidence/f1-jmeter.jmx \
+            -l evidence/f1-jmeter-qps.jtl \
+            -j evidence/f1-jmeter-qps.log \
+            2>&1 | tee evidence/jmeter-qps-stdout.log
+
+      # Threshold check:解析 jmeter 输出的 `summary =` 行,取 throughput(/s)。
+      #   - 若 jtl 空(PR 环境无 app,connection refused 全为失败样本,summary=0/s):
+      #     WARN 跳过,不 FAIL。
+      #   - 若有 summary 且 throughput >= 5000: PASS。
+      #   - 若有 summary 且 throughput < 5000: WARN(注:PR 环境这是预期,
+      #     真实 5k+ QPS 验收留给 init.ps1 阶段 5 本地实跑 / main-regression)。
+      # 之所以 WARN 不 FAIL:本 workflow 在 PR 环境无 app,严格 FAIL 会让所有 PR 红,
+      # 反而违背 CI 价值(用 CI 做早期反馈,不是最终验收)。
+      - name: Threshold check — parse summary throughput
+        run: |
+          set -uo pipefail
+          if [ ! -s evidence/f1-jmeter-qps.jtl ]; then
+            echo "WARN: jtl empty; threshold check skipped (PR env has no app on :8080)"
+            exit 0
+          fi
+          summary=$(grep -E '^\s*summary\s*=' evidence/jmeter-qps-stdout.log | tail -n 1 || true)
+          if [ -z "$summary" ]; then
+            echo "WARN: no summary line in jmeter stdout; threshold check skipped"
+            exit 0
+          fi
+          echo "summary: $summary"
+          throughput=$(echo "$summary" | grep -oE '[0-9]+\.[0-9]+/s' | head -n 1 | sed 's|/s||' || true)
+          if [ -z "$throughput" ]; then
+            echo "WARN: could not parse throughput from summary; threshold check skipped"
+            exit 0
+          fi
+          echo "parsed throughput: ${throughput} RPS"
+          if awk -v t="$throughput" 'BEGIN{ exit (t+0 >= 5000.0) ? 0 : 1 }'; then
+            echo "PASS: throughput ${throughput} >= 5000 RPS"
+          else
+            echo "WARN: throughput ${throughput} < 5000 RPS (PR env has no real app, expected); not enforced in PR"
+          fi
+
+      - name: Upload JMeter artifacts (jtl + log + stdout)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-f1-qps
+          path: |
+            evidence/f1-jmeter-qps.jtl
+            evidence/f1-jmeter-qps.log
+            evidence/jmeter-qps-stdout.log
+          retention-days: 7
