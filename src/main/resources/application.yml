@@ -92,6 +92,14 @@ management:
       enabled: ${MANAGEMENT_HEALTH_REDIS:false}
     rabbit:
       enabled: ${MANAGEMENT_HEALTH_RABBIT:false}
+    # F-6 demo-readiness:k8s 风格探针分组
+    # liveness — 仅反映应用进程存活,不查外部依赖,防止 Redis 抖动触发 pod 误杀
+    # readiness — 含 Redis/Rabbit/MySQL 探针,依赖未就绪则不接流量
+    group:
+      liveness:
+        include: livenessState
+      readiness:
+        include: readinessState,redis,rabbit,db
 
 server:
   port: 8080

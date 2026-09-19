@@ -62,6 +62,9 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/actuator/health",
                                 "/actuator/health/**",
+                                // F-6 demo-readiness:显式放行 liveness/readiness 探针
+                                "/actuator/health/liveness",
+                                "/actuator/health/readiness",
                                 // F-4 review fix:/actuator/info 不再默认 permitAll(防止未来 info.* 配置
                                 // 引入 git/build/env 泄露);要走鉴权
                                 "/admin/preheat/**"
