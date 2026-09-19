@@ -117,3 +117,79 @@ INIT → Zone → Cuisine → Merchant
 | `bench` / `smoke` | `DashScopeChatModel`(阿里云百炼,`spring-ai-alibaba-starter-dashscope` 1.1.2.2)| `SPRING_PROFILES_ACTIVE=bench ./mvnw spring-boot:run` | 走真实 API,产生 token 计费 |
 
 **纪律**:`./mvnw test` 与本地开发**禁止**启用 `bench` / `smoke` profile(用户 2026-09-18 Q2 明确"测试一定要先 mock 数据跑通,不然会造成金钱损失")。F-3 量化证据采集阶段才切真。
+
+---
+
+## 11. 限流(对应 F-7 即将落地的 bullet)
+
+| 术语 | 含义 |
+|---|---|
+| 双层令牌桶 | 同一请求先过用户级桶(防单用户滥用)再过 API 全局桶(防系统过载),两层都通过才放行。 |
+| 用户级桶 | key `rate:user:<sid>`,容量 + 速率按用户画像(普通 / VIP / 黑名单)配置。 |
+| API 全局桶 | key `rate:api:<endpoint>`,容量按接口特性(`/api/like` 容量大,`/api/recommend` 容量小)。 |
+| 令牌桶 Lua 脚本 | Redis 单脚本原子执行"读桶 → 计算新令牌数 → 写回 → 返回是否放行",避免 read-modify-write 竞态。 |
+| Caffeine 进程内降级 | Redis 不可用时切到 JVM-local 令牌桶(同接口、容量较小),Redis 恢复后异步回写计数。降级期间日志 WARN + 指标 `rate_limiter_degraded_total` 自增。 |
+| 拒绝响应 | HTTP 429 + `Retry-After` header + JSON `{code: 42900, message: "rate limited"}`。 |
+
+**key 命名**:`rate:user:<sid>` 与 `rate:api:<endpoint>`,前者按用户维度、后者按接口维度,互不交叉。token 计算在 Lua 脚本里完成,客户端无感。
+
+**纪律**:降级路径必须显式(不能 silent fallback);降级指标必须有,否则面试官追问"你怎么知道 Redis 挂了"答不上。
+
+---
+
+## 12. 分布式锁(对应 F-8 即将落地的 bullet)
+
+| 术语 | 含义 |
+|---|---|
+| 锁 key | `lock:preheat:global`(预热防重)与 `lock:like:<sid>:<mid>`(点赞幂等升级)两类;key 必须做白名单字符校验(防注入)。 |
+| SETNX + TTL | `SET key <ownerToken> NX EX 30` 原子获取;ownerToken 是 UUID,用于"谁持锁"的识别。 |
+| 看门狗(Watchdog) | 后台调度线程每 10 秒续期一次(将 TTL 重置为 30s),业务执行超时可自动续。续期失败 3 次主动放弃 + 抛异常。 |
+| 锁释放 | 必须 Lua 脚本校验 ownerToken 后 DEL,防止 A 释放 B 的锁(TTL 过期导致 ownerToken 变化)。 |
+| RedLock 单 Redis 假设 | 本 demo 单 Redis 实例,SETNX 已足够;多 Redis RedLock 留 ADR 标记未来扩展(避免单 Redis 挂了锁失效)。 |
+
+**纪律**:每个 `lock:*` key 必须配 ownerToken,不能裸用 `SETNX EX`(否则 release 时会误删别人锁);F-5 现有 `like:idem:*` 与 F-8 新加 `lock:like:*` 是两个独立 key,不互相替代(前者是 60s 幂等窗口,后者是分布式强一致性)。
+
+---
+
+## 13. 可观测性(对应 F-9 即将落地的 bullet)
+
+### 13.1 业务指标(自定义,4 个)
+
+| 指标名 | 类型 | tag | 含义 |
+|---|---|---|---|
+| `like_count_total` | Counter | `endpoint` | 点赞累计次数(F-5 业务量)|
+| `recommend_latency_seconds` | Timer | `endpoint`, `hit_tier` | 推荐请求端到端延迟,tag hit_tier ∈ {mock, dashscope, fallback} |
+| `cache_hit_ratio` | Gauge | `cache_name`, `hit_tier` | 缓存命中率(F-4/F-5 L0/L1/L2 命中分布),hit_tier ∈ {L0, L1, L2, miss} |
+| `session_stage_distribution` | Gauge | `stage` | 会话槽位阶段分布(INIT / ZONE / CUISINE / MERCHANT),反映用户在哪个阶段流失 |
+
+### 13.2 技术指标(Micrometer 自动导出,6 个)
+
+| 指标名 | 来源 | 含义 |
+|---|---|---|
+| `tomcat_threads_busy` | `tomcat.threads.busy` | Tomcat 工作线程占用,反映并发压力 |
+| `hikari_pool_active` | `hikaricp.connections.active` | DB 连接池活跃数,反映 DB 压力 |
+| `redis_pool_active` | `lettuce-native-thread.pool.size` | Redis 连接池使用情况 |
+| `jvm_memory_used_bytes` | `jvm.memory.used` | JVM 堆内存使用 |
+| `gc_pause_seconds` | `jvm.gc.pause` | GC 暂停时间(关键 SLO 指标) |
+| `http_server_requests_seconds_count` | `http.server.requests` | HTTP 状态码分布(2xx/4xx/5xx 比例)|
+
+### 13.3 暴露路径
+
+- `GET /actuator/prometheus` — Prometheus 格式(仅 prod profile 启用,dev 关闭避免开发时输出噪声)
+- Grafana dashboard:`docs/observability/grafana-overview.json`(F-9 落地时产出)
+- 告警规则:`docs/observability/alerts.yml`(后续,F-9 不强制)
+
+**纪律**:tag 维度不允许含 userId / merchantId 等高基数字段(否则 Prometheus 内存爆炸);`hit_tier` 是低基数枚举,安全。
+
+---
+
+## 14. CI/CD 与灰度(对应 F-10 / F-11 即将落地的非 bullet 工程项)
+
+| 术语 | 含义 |
+|---|---|
+| CI 触发 | PR open/sync → 跑 `mvn verify` + locust F-5 P99 smoke;`main` push → 跑完整 `init.ps1` 6 stage(含 JMeter) |
+| QPS 敏感 PR | PR 标题含 `[qps]` tag 或 label → 额外跑 JMeter F-1 5000+ QPS 验证 |
+| Feature Flag | `FeatureFlagService.isEnabled(flagKey, userContext)` 接口;Redis hash 存 flag 配置;支持三种模式:功能开关 / 白名单 / 比例灰度 |
+| 灰度回滚 | 改 Redis hash `feature_flags` 立即生效,无需重启;`/admin/feature-flag/reload` 主动重载(可选)|
+
+**纪律**:三种灰度模式都必须在 `docs/observability/demo-scenarios.md` 留 demo curl 路径(招实习现场可演);不做真流量调度(代价大,价值小)。
