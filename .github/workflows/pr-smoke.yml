@@ -48,16 +48,18 @@ jobs:
       - name: Install uv
         run: pip install --upgrade uv
 
-      - name: Install locust (uv, system)
-        # Ubuntu runner 默认 Python 3.12 启用 PEP 668,需 --break-system-packages
-        run: uv pip install --system --break-system-packages locust
+      - name: Set up Python venv (uv) + install locust
+        # ubuntu-latest runner 非 root,无法写 /usr/local/lib;改用 uv venv 装到 .venv
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python locust
 
       # PR smoke 不起 app,只验证 locustfile_mix.py 语法 OK + 装好环境。
       # --collect-only 让 locust 加载 User 类但不调度任何请求
       - name: Locust dry-run (--collect-only) smoke
         run: |
           mkdir -p evidence
-          locust -f locustfile_mix.py --collect-only 2>&1 | tee evidence/locust-pr-smoke.log
+          .venv/bin/locust -f locustfile_mix.py --collect-only 2>&1 | tee evidence/locust-pr-smoke.log
 
       # 始终上传,即使前面失败(便于事后排查)
       - name: Upload locust smoke log

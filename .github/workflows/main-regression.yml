@@ -54,18 +54,22 @@ jobs:
       - name: Install uv
         run: pip install uv
 
-      - name: Install locust(uv 直接装到系统 Python)
-        # 与本地 init.ps1 §6/6 保持同一工具链;uv 是 ADR-0004 锁定的 Python 包管理器
-        # Ubuntu runner 默认 Python 3.12 启用 PEP 668(externally-managed-environment),
-        # 必须用 --break-system-packages 强制覆盖;CI 一次性 runner,无系统污染风险
-        run: uv pip install --system --break-system-packages locust
+      - name: Set up Python venv (uv) + install locust
+        # GitHub Actions ubuntu-latest runner 是非 root 用户,无法写 /usr/local/lib
+        # 装 system Python 包(uv pip install --system 会 Permission denied)。
+        # 改用 uv venv 装到项目本地 .venv:符合 ADR-0004 锁定的 uv 工具链 + 避开权限问题。
+        # --collect-only 让 locust 实例化所有 User 类并打印统计,但不启动负载生成
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python locust
+          .venv/bin/locust --version
 
       - name: Locust dry-run(语法 / 导入校验,不真发请求)
         # --collect-only 让 locust 实例化所有 User 类并打印统计,但不启动负载生成
         # 适配 GitHub Ubuntu runner 无 cfr-app 实例的现实;仅校验 locustfile_mix.py 可导入
         run: |
           mkdir -p evidence
-          locust -f locustfile_mix.py --collect-only 2>&1 | tee evidence/locust-main.log
+          .venv/bin/locust -f locustfile_mix.py --collect-only 2>&1 | tee evidence/locust-main.log
         continue-on-error: false
 
       - name: Audit commit messages(最近 20 commit 必须含 [F-N] 前缀)
