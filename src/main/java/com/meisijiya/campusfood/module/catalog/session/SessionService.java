@@ -6,6 +6,9 @@ import java.util.concurrent.TimeUnit;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 /**
  * 会话槽位业务服务 — 组合状态机校验与 Redis 读写。
  *
@@ -36,10 +39,16 @@ public class SessionService {
 
     private final SessionSlotStateMachine stateMachine;
     private final StringRedisTemplate redis;
+    /** F-9 W2:session_stage_distribution 计数器 registry。 */
+    private final MeterRegistry meterRegistry;
 
-    public SessionService(SessionSlotStateMachine stateMachine, StringRedisTemplate redis) {
+    public SessionService(
+            SessionSlotStateMachine stateMachine,
+            StringRedisTemplate redis,
+            MeterRegistry meterRegistry) {
         this.stateMachine = stateMachine;
         this.redis = redis;
+        this.meterRegistry = meterRegistry;
     }
 
     // ---------- 公共 API ----------
@@ -101,6 +110,16 @@ public class SessionService {
         SessionStage stage = readStage(sid);
         if (stage == null) {
             stage = SessionStage.INIT;
+        }
+        // F-9 W2:按当前 stage 自增对应 gauge tag(INIT/ZONE/CUISINE/MERCHANT);
+        // 用 Counter 实现:每次 readContext() 命中 = 一次 stage 分布观察样本。
+        // Prometheus 端会将 count 求和后呈现为不同 stage 的分布计数。
+        if (meterRegistry != null) {
+            Counter.builder("session_stage_distribution")
+                    .description("F-9 W2:SessionService.readContext() 按当前 stage 自增")
+                    .tag("stage", stage.name())
+                    .register(meterRegistry)
+                    .increment();
         }
         return new SessionContext(
                 stage,

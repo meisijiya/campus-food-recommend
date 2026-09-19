@@ -27,6 +27,8 @@ import com.meisijiya.campusfood.module.preheat.assembler.MerchantCatalog;
 import com.meisijiya.campusfood.module.preheat.heat.Merchant;
 import com.meisijiya.campusfood.module.preheat.heat.MerchantRepository;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 /**
  * {@link MerchantQueryService} 单元测试(F-5 L0 → L1 → L2 严格降级)— 用真实 Caffeine 实例
  * 验证 3 级缓存命中路径 + backfill + 负缓存语义。
@@ -56,6 +58,7 @@ class MerchantQueryServiceTest {
     private RedisShardedWriter writer;
     private Cache<String, Optional<Merchant>> merchantHotCache;
     private Cache<String, List<Merchant>> zoneCatalogCache;
+    private SimpleMeterRegistry meterRegistry;
     private MerchantQueryService service;
 
     @BeforeEach
@@ -78,8 +81,11 @@ class MerchantQueryServiceTest {
                 .expireAfterWrite(java.time.Duration.ofMinutes(10))
                 .build();
 
+        // F-9 W2:SimpleMeterRegistry 作为测试替身,验证 findById 在三层命中路径都会打 Counter
+        meterRegistry = new SimpleMeterRegistry();
+
         service = new MerchantQueryService(repo, redis, mapper, writer,
-                merchantHotCache, zoneCatalogCache);
+                merchantHotCache, zoneCatalogCache, meterRegistry);
     }
 
     private static Merchant newMerchant(String id) {

@@ -19,6 +19,9 @@ import com.meisijiya.campusfood.module.preheat.assembler.Zone;
 import com.meisijiya.campusfood.module.preheat.heat.Merchant;
 import com.meisijiya.campusfood.module.preheat.heat.MerchantRepository;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 /**
  * 商户查询服务(F-5 L0 → L1 → L2 严格降级)— 暴露给 {@link MerchantController} 的商户读模型。
  *
@@ -70,6 +73,8 @@ public class MerchantQueryService {
     private final Cache<String, Optional<Merchant>> merchantHotCache;
     /** L0 Caffeine 校区目录 cache;value 是扁平化后的 List<Merchant>。 */
     private final Cache<String, List<Merchant>> zoneCatalogCache;
+    /** F-9 W2:Micrometer 指标 registry — 用于打 cache_hit_ratio 计数器。 */
+    private final MeterRegistry meterRegistry;
 
     public MerchantQueryService(
             MerchantRepository repository,
@@ -77,13 +82,15 @@ public class MerchantQueryService {
             ObjectMapper mapper,
             RedisShardedWriter writer,
             Cache<String, Optional<Merchant>> merchantHotCache,
-            Cache<String, List<Merchant>> zoneCatalogCache) {
+            Cache<String, List<Merchant>> zoneCatalogCache,
+            MeterRegistry meterRegistry) {
         this.repository = repository;
         this.redis = redis;
         this.mapper = mapper;
         this.writer = writer;
         this.merchantHotCache = merchantHotCache;
         this.zoneCatalogCache = zoneCatalogCache;
+        this.meterRegistry = meterRegistry;
     }
 
     /**
@@ -105,9 +112,13 @@ public class MerchantQueryService {
         if (l0 != null) {
             if (l0.isPresent()) {
                 log.debug("MerchantQueryService L0 hit, merchantId={}", merchantId);
+                // F-9 W2:cache_hit_ratio{merchantHotCache, L0} +1
+                bumpHitCounter("merchantHotCache", "L0");
                 return l0;
             }
             log.debug("MerchantQueryService L0 negative hit, merchantId={}", merchantId);
+            // 负缓存也算 hit(NOT_FOUND 也算避免了下游穿透,等价 hit)
+            bumpHitCounter("merchantHotCache", "L0");
             return Optional.empty();
         }
 
@@ -126,6 +137,7 @@ public class MerchantQueryService {
                 if (marker != null && marker.__null__()) {
                     log.debug("MerchantQueryService L1 negative hit, merchantId={}", merchantId);
                     merchantHotCache.put(merchantId, Optional.empty()); // backfill L0 negative
+                    bumpHitCounter("merchantHotCache", "L1");
                     return Optional.empty();
                 }
                 // marker 解析成功但 __null__=false → 这其实是商户 JSON,落到下方 Merchant 反序列化
@@ -137,6 +149,7 @@ public class MerchantQueryService {
                 Merchant m = mapper.readValue(cached, Merchant.class);
                 log.debug("MerchantQueryService L1 hit, merchantId={}", merchantId);
                 merchantHotCache.put(merchantId, Optional.of(m)); // backfill L0
+                bumpHitCounter("merchantHotCache", "L1");
                 return Optional.of(m);
             } catch (JsonProcessingException e) {
                 log.warn("MerchantQueryService L1 deserialize failed, fallback to L2, merchantId={} err={}",
@@ -149,6 +162,8 @@ public class MerchantQueryService {
         Optional<Merchant> result = repository.findById(merchantId);
         if (result.isPresent()) {
             log.debug("MerchantQueryService L2 hit, merchantId={}", merchantId);
+            // F-9 W2:cache_hit_ratio{merchantHotCache, L2} +1
+            bumpHitCounter("merchantHotCache", "L2");
             // backfill L1 (writer 内部会捕获序列化异常包装 IllegalStateException,这里再兜一层)
             try {
                 writer.writeMerchantCache(merchantId, result.get());
@@ -160,6 +175,8 @@ public class MerchantQueryService {
             merchantHotCache.put(merchantId, result);
         } else {
             log.debug("MerchantQueryService L2 miss, merchantId={}", merchantId);
+            // F-9 W2:cache_hit_ratio{merchantHotCache, miss} +1(全空,全 miss)
+            bumpHitCounter("merchantHotCache", "miss");
             // L1 负缓存回填(防穿透)
             try {
                 writer.writeMerchantCache(merchantId, null);
@@ -171,6 +188,24 @@ public class MerchantQueryService {
             merchantHotCache.put(merchantId, Optional.empty());
         }
         return result;
+    }
+
+    /**
+     * F-9 W2:cache_hit_ratio 计数器 helper — 调用一次即在 {@link MeterRegistry}
+     * 注册名为 {@code cache_hit_ratio},tags {@code cache_name=<cacheName>, hit_tier=<hitTier>}
+     * 的 {@link Counter} 自增一次。Micrometer 内部对相同 name + tags 复用同一 Counter 实例,无副作用。
+     */
+    private void bumpHitCounter(String cacheName, String hitTier) {
+        if (meterRegistry == null) {
+            // 防御性兜底:理论上 Spring 注入 MeterRegistry 不会为 null,但保留 fallback 防止 null-pointer 测试崩溃
+            return;
+        }
+        Counter.builder("cache_hit_ratio")
+                .description("F-9 W2:MerchantQueryService 三层命中路径累计")
+                .tag("cache_name", cacheName)
+                .tag("hit_tier", hitTier)
+                .register(meterRegistry)
+                .increment();
     }
 
     /**

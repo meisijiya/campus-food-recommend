@@ -1,0 +1,20 @@
+# F-9 W2:Grafana 自动 provision 的 datasource 配置 — 容器启动时 Grafana 读
+# /etc/grafana/provisioning/datasources/*.yml 自动注册 datasource(无需 UI 配置)。
+#
+# 同网络下 `prometheus` 是 docker compose 服务名(对应 cfr-prometheus 容器),
+# url 写 `http://prometheus:9090` 不要写 localhost(Grafana 跑在容器里,localhost 是它自己)。
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # Grafana container 内访问 Prometheus 服务用容器名 + compose 端口
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # Grafana 的 time series DB 自动调参:demo 阶段够用
+      timeInterval: 15s
+      httpMethod: POST

@@ -1,0 +1,27 @@
+# F-9 W2:Prometheus scrape 配置 — 抓取 cfr-app 暴露的 /actuator/prometheus。
+#
+# 网络模型:prometheus / grafana / app 三者同属 docker compose 的 cfr-net bridge 网络,
+# scrape target 用服务名 `app` 即可解析为 cfr-app 容器。Prometheus 容器内解析 `app:8080`
+# 等价于 cfr-app 容器内的 8080 端口(由 compose `app.ports: "8080:8080"` 暴露)。
+#
+# scrape_interval:15 秒 — 与 Spring Boot 默认 metrics scrape 节奏保持一致,
+# 避免被 prometheus 拉扯到过于频繁的轮询,免得 demo 上 Grafana 滚动过快看不清趋势。
+#
+# metrics_path:/actuator/prometheus — 必须与 application.yml 的
+# `management.endpoints.web.exposure.include: health,info,metrics,prometheus`
+# 对齐,否则 Prometheus 抓不到数据。
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  # external_labels 留空;不预设 cluster / env 标签,demo 阶段够用。
+  # 生产场景应加 `cluster: campus-food-demo` 让 Prometheus / Grafana 聚合多集群。
+
+scrape_configs:
+  - job_name: campus-food-app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # 同网络下 `app` 是 docker compose 服务名(对应 cfr-app 容器)。
+      # 8080 与 app service 暴露给容器网络的端口一致。
+      - targets:
+          - app:8080
