@@ -51,11 +51,11 @@
 
 | workflow | 触发 | runner | timeout | 范围 | artifact |
 |---|---|---|---|---|---|
-| **pr-smoke.yml**(W1) | `pull_request` open / synchronize | `ubuntu-latest` | 8 min | `mvn -B verify` + locust 语法 dry-run | `evidence/*.csv`(retention 7 天) |
-| **qps-sensitive.yml**(W1) | PR label = `qps-sensitive` OR PR title 含 `[qps]` | `ubuntu-latest` | 12 min | pr-smoke + JMeter F-1 5000+ QPS(基于 `evidence/f1-jmeter.jmx`) | `evidence/*.jtl` + `evidence/*.csv`(retention 7 天) |
-| **main-regression.yml**(W2) | `push main` + `workflow_dispatch` | `ubuntu-latest` | 15 min | `mvn -B verify -DskipBenchITs` + locust collect-only + commit audit + artifact 上传 | `evidence/*.csv` + `*.log` + `*.jtl` + `*.json`(retention **14 天**) |
+| **pr-smoke.yml**(W1) | `pull_request` open / synchronize | `ubuntu-latest` | 8 min | `mvn -B verify` + locust 语法 dry-run | `locust-pr-smoke`(`evidence/locust-pr-smoke.log`,retention 7 天) |
+| **qps-sensitive.yml**(W1) | PR 三 OR:label `qps-sensitive` OR title 含 `[qps]` OR head_ref 含 `qps` | `ubuntu-latest` | 12 min | pr-smoke + JMeter F-1 5000+ QPS(基于 `evidence/f1-jmeter.jmx`) | `locust-qps-smoke`(`evidence/locust-qps-smoke.log`,retention 7 天)+ `jmeter-f1-qps`(`f1-jmeter-qps.jtl/log` + `jmeter-qps-stdout.log`,retention 7 天) |
+| **main-regression.yml**(W2) | `push main` + `workflow_dispatch` | `ubuntu-latest` | 15 min | `mvn -B verify -DskipBenchITs` + locust collect-only + commit audit + artifact 上传 | `evidence-main-<sha>`(`evidence/*.csv` + `*.log` + `*.jtl` + `*.json`,retention **14 天**) |
 
-> **双保险**:qps-sensitive.yml 的 label + title 双触发条件避免单一通道漏掉关键 PR,详见 §6。
+> **三触发**:qps-sensitive.yml 的 label / title / head_ref 三 OR 触发条件避免单一通道漏掉关键 PR,详见 §6。
 
 ---
 
@@ -97,9 +97,12 @@
 
 | workflow | artifact name | path | retention | if: always() |
 |---|---|---|---|---|
-| pr-smoke | `evidence-pr-<sha>` | `evidence/*.csv` | 7 天 | ✅ |
-| qps-sensitive | `evidence-qps-<sha>` | `evidence/*.jtl` + `evidence/*.csv` | 7 天 | ✅ |
+| pr-smoke | `locust-pr-smoke` | `evidence/locust-pr-smoke.log` | 7 天 | ✅ |
+| qps-sensitive(locust 段) | `locust-qps-smoke` | `evidence/locust-qps-smoke.log` | 7 天 | ✅ |
+| qps-sensitive(JMeter 段) | `jmeter-f1-qps` | `evidence/f1-jmeter-qps.jtl` + `evidence/f1-jmeter-qps.log` + `evidence/jmeter-qps-stdout.log` | 7 天 | ✅ |
 | **main-regression** | `evidence-main-<sha>` | `evidence/*.csv` + `*.log` + `*.jtl` + `*.json` | **14 天** | ✅ |
+
+> 注:qps-sensitive 一次 PR 会同时产 2 个 artifact(locust 段 + JMeter 段),分别由两个 job 上传;GitHub Actions UI 上以两行显示。
 
 - `if: always()` 保证 mvn verify 失败时仍上传产物(便于事后定位)。
 - `if-no-files-found: ignore` 防止空 evidence 目录导致 upload 步骤失败。
@@ -110,10 +113,11 @@
 
 ## 6. qps-sensitive 触发细节(W1 同事实现)
 
-PR 想触发 JMeter F-1 5000+ QPS 跑测,**任一**条件即可:
+PR 想触发 JMeter F-1 5000+ QPS 跑测,**任一**条件即可(三 OR):
 
 1. **PR 打了 label**:`qps-sensitive`
 2. **PR title 含**:`[qps]`(大小写不敏感)
+3. **PR head ref(分支名)含**:`qps`(如 `feature/qps-tune-rate-limit`)
 
 CI 配置示例(W1 同事落地):
 
@@ -122,17 +126,19 @@ on:
   pull_request:
     types: [opened, synchronize, labeled, unlabeled]
 jobs:
-  qps:
+  jmeter-f1:
     if: |
       contains(github.event.pull_request.labels.*.name, 'qps-sensitive') ||
-      contains(github.event.pull_request.title, '[qps]')
+      contains(github.event.pull_request.title, '[qps]') ||
+      contains(github.head_ref, 'qps')
     # ...
 ```
 
-**为什么双保险**:
+**为什么三通道兜底**:
 - label 适合"我改了限流 Lua,想看下 5000 QPS 下 Redis 抗不抗"(主动 opt-in)
 - title 适合"紧急 hotfix,默认就当 QPS 敏感 PR 跑"(被动,merge 时省一步)
-- 两个都设置时只跑一次(`if` 是 OR 不是 AND,不会重复跑)
+- head_ref 适合"我在分支命名时就表达意图(如 `qps/recommend-cache-tune`),不用每次记得改 title / 加 label"
+- 多个都设置时只跑一次(`if` 是 OR 不是 AND,不会重复跑)
 
 ---
 
@@ -162,11 +168,12 @@ jobs:
 ```bash
 abc1234 修复鉴权漏洞
 ```
-修复(非交互 reword):
-```bash
-git rebase -i HEAD~1  # 把 pick 改成 reword
-# 编辑器内改为:[F-1][W2] 修复鉴权漏洞
-```
+
+修复路径(**根据环境选择**):
+
+- **本地手动(编辑器交互)**: `git rebase -i HEAD~1` 把 `pick` 改成 `reword`,编辑器内改为 `[F-1][W2] 修复鉴权漏洞`
+- **本仓库 AI 自动化环境**(harness 禁用 `git -i` flag): 用 `git commit --amend -m "[F-N][W?] 修复鉴权漏洞"` 改最近一条,或 `git rebase --exec 'git commit --amend -m "..."' HEAD~N` 批量改历史
+- **批量重写历史**: `git filter-branch --msg-filter 'sed "s/^/[F-N] /"' HEAD~N..HEAD`(谨慎,会重写 SHA)
 
 ---
 
