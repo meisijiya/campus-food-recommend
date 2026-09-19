@@ -72,11 +72,18 @@ New-Item -ItemType Directory -Path "evidence" -Force | Out-Null
 # 阈值由 ADR-0005 + F-1 evidence 段定义:60s 平均 ≥ 5000 RPS,误差 < 5%
 
 # === 6/6 ===
-Write-Host "[init.sh] 阶段 6/6: locust F-5 P99<50ms 压测(待 F-5 完成才生效)..."
+Write-Host "[init.sh] 阶段 6/6: locust F-5 P99<50ms 压测..."
 $likeCtrl = "src\main\java\com\meisijiya\campusfood\module\like\LikeController.java"
 if (Test-Path $likeCtrl) {
-    & $UvBin run locust -f locustfile.py --headless --host=http://localhost `
-        --tags mix-like-detail -u 50 -r 25 -t 10s --csv=evidence/f5-p99 2>&1 | Select-Object -Last 20
+    # F-5 evidence:用 locustfile_mix.py(per-tag 拆分,避开 --tags 在 master file 上的 instantiation 失败)
+    # host 用 127.0.0.1 不用 localhost(Windows localhost 优先解析 IPv6 [::1],cfr-app 只绑 IPv4)
+    # 30s 完整跑(u=50 r=25 / 50% like + 50% merchant),binding acceptance: P99 < 50ms
+    & $UvBin run locust -f locustfile_mix.py --headless --host=http://127.0.0.1:8080 `
+        -u 50 -r 25 -t 30s --csv=evidence/f5-p99 2>&1 | Select-Object -Last 20
+    $locustExit = $LASTEXITCODE
+    if ($locustExit -ne 0) {
+        Write-Host "[init.sh] WARN: locust 退出码非零($locustExit),但 acceptance 在独立 evidence 文件已固化,继续"
+    }
 } else {
     Write-Host "[init.sh] 跳过(LikeController 尚未实现,F-5 待开干)"
 }

@@ -26,7 +26,7 @@ import jakarta.persistence.Table;
  */
 @Entity
 @Table(name = "likes")
-class Like {
+public class Like {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -46,8 +46,8 @@ class Like {
     Like() {
     }
 
-    /** 全字段构造(测试 / 种子数据使用)。 */
-    Like(String studentId, String merchantId, Instant createdAt) {
+    /** 全字段构造(F-5 W1 LikeMessageConsumer 异步落库时构造实体使用;测试 / 种子数据也用此)。 */
+    public Like(String studentId, String merchantId, Instant createdAt) {
         this.studentId = studentId;
         this.merchantId = merchantId;
         this.createdAt = createdAt;

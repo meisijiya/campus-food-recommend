@@ -161,8 +161,12 @@ public class RedisShardedWriter {
     /**
      * 负缓存 marker — {@code {"__null__": true}};{@link MerchantQueryService} 读到此值
      * 视为"已确认不存在",避免对同一 merchantId 反复穿透 L1→L2。
+     *
+     * <p>F-5 verifier finding #3 修复后变成 {@code public}:跨包(
+     * {@code module.catalog.MerchantQueryService})用 Jackson 反序列化校验,
+     * 不再用脆弱的字符串 contains 匹配。
      */
-    record NullMerchantMarker(boolean __null__) {
+    public record NullMerchantMarker(boolean __null__) {
         NullMerchantMarker() { this(true); }
     }
 }
