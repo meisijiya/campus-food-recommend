@@ -56,3 +56,15 @@ uv.lock
 # 压测报告产物(每 ticket 自己出 csv 到 evidence/)
 evidence/*.csv
 evidence/**/*.csv
+
+# --- JMeter 压测原始数据(占体积大,数字摘要已在工单 evidence 段,重跑 jmx plan 即可复现) ---
+evidence/*.jtl
+evidence/**/*.jtl
+evidence/*.log
+evidence/**/*.log
+
+# --- Subagent-Driven Development workspace(plan/brief/report/ledger/diff;完成后即弃,git 历史是记录) ---
+.superpowers/sdd/*/
+
+# --- harness-creator 本会话审计产物(下次会话不再相关) ---
+.far/

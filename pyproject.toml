@@ -20,3 +20,8 @@ csv-full-history = true
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# 本仓只把 pyproject.toml 当作 locust 依赖清单,不是真正的 Python 包;
+# uv run locust 在 .venv 直接 import locust 即可,不需要 build wheel。
+[tool.uv]
+package = false
