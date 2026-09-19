@@ -62,6 +62,18 @@ spring:
         size: 2
       thread-name-prefix: cfr-sched-
 
+# 限流配置(F-7)— 用户级 + API 全局双层令牌桶,key 名与 W2 的 RateLimitFallbackConfig 对齐
+# 用户级:防单 studentId 滥用;API 全局:防系统过载
+# RateLimitFilter 串联 redisXxxRateLimiter(W1 声明)+ caffeineXxxRateLimiter(W2 声明)两层
+rate-limit:
+  user:
+    burst: 100
+    rate: 10.0
+  api:
+    burst: 1000
+    rate: 500.0
+  script-location: scripts/
+
 # JWT 配置(从环境变量读,严禁硬编码)
 jwt:
   issuer: campus-food-recommend
@@ -74,7 +86,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: when-authorized
@@ -100,6 +112,11 @@ management:
         include: livenessState
       readiness:
         include: readinessState,redis,rabbit,db
+  # F-9 W2:Micrometer → Prometheus 导出。prod profile 开启,dev / test 关闭以免污染本地 / CI 调试。
+  prometheus:
+    metrics:
+      export:
+        enabled: ${MANAGEMENT_PROMETHEUS_EXPORT:false}
 
 server:
   port: 8080
