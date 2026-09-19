@@ -5,82 +5,139 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.meisijiya.campusfood.module.preheat.RedisShardedWriter;
 import com.meisijiya.campusfood.module.preheat.heat.Merchant;
 import com.meisijiya.campusfood.module.preheat.heat.MerchantRepository;
 
 /**
- * 商户查询服务(F-4 L1→L2 中间态)— 暴露给 {@link MerchantController} 的商户读模型。
+ * 商户查询服务(F-4 L1→L2 严格降级)— 暴露给 {@link MerchantController} 的商户读模型。
  *
- * <h2>F-4 阶段定位</h2>
- * 当前只走 L2 MySQL,跳过 L0/L1 缓存层;这是有意的中间态,目的是把"读路径稳定下来"
- * 后再让 F-5 一次性接入 Caffeine(L0)+ Redis(L1)+ MySQL(L2)三级降级,F-5 接入时本类
- * 只在方法体里加缓存包装,接口签名不变。
+ * <h2>F-4 阶段降级链路</h2>
+ * <pre>
+ *   redisTemplate.opsForValue().get("catalog:merchant:&lt;id&gt;")
+ *      ├─ 命中(对象) → 解析为 Merchant → 返
+ *      ├─ 命中(负缓存) → 返 Optional.empty()
+ *      └─ miss → repository.findById(id)
+ *           ├─ 命中 → 写 L1 回填 + 返
+ *           └─ miss → 写 L1 负缓存 + 返 Optional.empty()
+ * </pre>
  *
  * <h2>F-5 升级占位</h2>
- * F-5 升级为 L0 → L1 → L2 严格降级时,本类将插入:
- * <ul>
- *   <li>Caffeine L0({@code Cache<String, Merchant>},per-merchant,几秒 TTL)</li>
- *   <li>Redis L1({@code String merchant:<id> → JSON},per-merchant,分钟级 TTL)</li>
- *   <li>MySQL L2(沿用本类当前方法)</li>
- * </ul>
- * 升级时 {@link MerchantController} 与测试不受影响。
+ * F-5 升级为 L0 → L1 → L2 严格降级时,在 L1 之前插入 Caffeine per-merchant 几秒 TTL 的 L0;
+ * 接口签名不变,Controller 与现有测试不受影响。
  *
- * <p>类 Javadoc 显式声明 F-5 升级路径,避免后人误把 Redis 单 merchant cache 提前塞进
- * F-4 导致 F-5 改造出现双套缓存实现。
+ * <p>不带 Lombok,字段全部包私有 + 显式构造器注入;依赖通过 Spring 构造器注入,保证可测。
  *
  * @author meisijiya
  */
 @Service
-class MerchantQueryService {
+public class MerchantQueryService {
 
     private static final Logger log = LoggerFactory.getLogger(MerchantQueryService.class);
 
     private final MerchantRepository repository;
+    private final StringRedisTemplate redis;
+    private final ObjectMapper mapper;
+    private final RedisShardedWriter writer;
 
-    MerchantQueryService(MerchantRepository repository) {
+    public MerchantQueryService(
+            MerchantRepository repository,
+            StringRedisTemplate redis,
+            ObjectMapper mapper,
+            RedisShardedWriter writer) {
         this.repository = repository;
+        this.redis = redis;
+        this.mapper = mapper;
+        this.writer = writer;
     }
 
     /**
-     * 按主键查单商户(F-4 中间态:直接走 L2 MySQL)。
-     *
-     * <p>F-5 升级为:
-     * <pre>
-     *   Caffeine.getIfPresent(merchantId)  → 命中即返
-     *      ↓ miss
-     *   redisTemplate.opsForValue().get("merchant:" + merchantId)  → 命中写回 Caffeine 并返
-     *      ↓ miss
-     *   repository.findById(merchantId)  → 写回 Caffeine + Redis 并返
-     * </pre>
+     * 按主键查单商户(F-4 严格 L1→L2 降级,带负缓存)。
      *
      * @param merchantId 商户主键(业务方提供,非自增)
-     * @return Optional 包装的商户;空 = 不存在(由 Controller 决定抛 404 还是返空)
+     * @return Optional 包装的商户;空 = 不存在(由 Controller 决定抛 404)
      */
-    Optional<Merchant> findById(String merchantId) {
+    public Optional<Merchant> findById(String merchantId) {
+        if (merchantId == null || merchantId.isBlank()) {
+            return Optional.empty();
+        }
+
+        // 1. L1 查 Redis 单 merchant cache
+        String cached = safeRedisGet(RedisShardedWriter.PREFIX_MERCHANT + merchantId);
+        if (cached != null) {
+            // 负缓存命中
+            if (cached.contains("\"__null__\"")) {
+                log.debug("MerchantQueryService L1 negative hit, merchantId={}", merchantId);
+                return Optional.empty();
+            }
+            // 正缓存命中
+            try {
+                Merchant m = mapper.readValue(cached, Merchant.class);
+                log.debug("MerchantQueryService L1 hit, merchantId={}", merchantId);
+                return Optional.of(m);
+            } catch (JsonProcessingException e) {
+                log.warn("MerchantQueryService L1 deserialize failed, fallback to L2, merchantId={} err={}",
+                        merchantId, e.getMessage());
+                // 序列化坏,降级到 L2 不阻塞
+            }
+        }
+
+        // 2. L2 查 MySQL
         Optional<Merchant> result = repository.findById(merchantId);
         if (result.isPresent()) {
-            log.info("MerchantQueryService L2 hit, merchantId={}", merchantId);
+            log.debug("MerchantQueryService L2 hit, merchantId={}", merchantId);
+            // 3. 回填 L1
+            try {
+                writer.writeMerchantCache(merchantId, result.get());
+            } catch (RuntimeException e) {
+                log.warn("MerchantQueryService L1 backfill failed (non-fatal), merchantId={} err={}",
+                        merchantId, e.getMessage());
+            }
         } else {
-            log.warn("MerchantQueryService L2 miss, merchantId={}", merchantId);
+            log.debug("MerchantQueryService L2 miss, merchantId={}", merchantId);
+            // 负缓存回填(防穿透)
+            try {
+                writer.writeMerchantCache(merchantId, null);
+            } catch (RuntimeException e) {
+                log.warn("MerchantQueryService L1 negative backfill failed (non-fatal), merchantId={} err={}",
+                        merchantId, e.getMessage());
+            }
         }
         return result;
     }
 
     /**
-     * 按 zoneId 列出商户(F-4 中间态:直接走 L2 MySQL)。
+     * 按 zoneId 列出商户(F-4 阶段:直接走 L2 MySQL)。
      *
-     * <p>F-5 升级为 Redis 区域级 cache key({@code merchants:zone:<zoneId> → JSON[List]},
-     * 分钟级 TTL)+ Caffeine 嵌套缓存(以 zoneId 为 key,值为商户列表)。F-4 阶段不预热
-     * 此 key,由凌晨 {@code HeatJobPreheater} 写;白天首次读穿透 L1/L0 是预期行为。
+     * <p>F-5 升级为 Redis 区域级 cache key + Caffeine 嵌套缓存。
      *
      * @param zoneId 校区 / 区域 ID
      * @return 该 zone 下商户列表(空集合 = 该 zone 无商户)
      */
-    List<Merchant> findByZoneId(String zoneId) {
+    public List<Merchant> findByZoneId(String zoneId) {
+        if (zoneId == null || zoneId.isBlank()) {
+            return List.of();
+        }
         List<Merchant> result = repository.findByZoneId(zoneId);
-        log.info("MerchantQueryService L2 zone query, zoneId={}, size={}", zoneId, result.size());
+        log.debug("MerchantQueryService L2 zone query, zoneId={}, size={}", zoneId, result.size());
         return result;
+    }
+
+    /**
+     * 包一层 Redis GET,网络异常时降级到 L2(不抛),避免缓存层抖动拖垮读路径。
+     */
+    private String safeRedisGet(String key) {
+        try {
+            return redis.opsForValue().get(key);
+        } catch (RuntimeException e) {
+            log.warn("MerchantQueryService Redis GET failed, fallback to L2, key={} err={}",
+                    key, e.getMessage());
+            return null;
+        }
     }
 }

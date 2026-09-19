@@ -36,7 +36,7 @@ class CatalogHierarchyAssemblerTest {
         MerchantCatalog catalog = assembler.assemble(Collections.emptyList());
 
         assertThat(catalog).isNotNull();
-        assertThat(catalog.zones()).isEmpty();
+        assertThat(catalog.getZones()).isEmpty();
     }
 
     @Test
@@ -45,7 +45,7 @@ class CatalogHierarchyAssemblerTest {
         MerchantCatalog catalog = assembler.assemble(null);
 
         assertThat(catalog).isNotNull();
-        assertThat(catalog.zones()).isEmpty();
+        assertThat(catalog.getZones()).isEmpty();
     }
 
     @Test
@@ -55,8 +55,8 @@ class CatalogHierarchyAssemblerTest {
 
         MerchantCatalog catalog = assembler.assemble(List.of(m));
 
-        assertThat(catalog.zones()).hasSize(1);
-        Zone zone = catalog.zones().get(0);
+        assertThat(catalog.getZones()).hasSize(1);
+        Zone zone = catalog.getZones().get(0);
         assertThat(zone.getZoneId()).isEqualTo("Z-1");
         assertThat(zone.getCuisines()).hasSize(1);
         Cuisine cuisine = zone.getCuisines().get(0);
@@ -74,8 +74,8 @@ class CatalogHierarchyAssemblerTest {
 
         MerchantCatalog catalog = assembler.assemble(List.of(a1, b1, a2));
 
-        assertThat(catalog.zones()).hasSize(1);
-        Zone zone = catalog.zones().get(0);
+        assertThat(catalog.getZones()).hasSize(1);
+        Zone zone = catalog.getZones().get(0);
         assertThat(zone.getCuisines()).hasSize(2);
         // LinkedHashMap 顺序:先出现的 cuisineId 在前
         assertThat(zone.getCuisines().get(0).getCuisineId()).isEqualTo("C-A");
@@ -98,11 +98,11 @@ class CatalogHierarchyAssemblerTest {
 
         MerchantCatalog catalog = assembler.assemble(List.of(m1, m2, m3, m4));
 
-        assertThat(catalog.zones())
+        assertThat(catalog.getZones())
                 .extracting(Zone::getZoneId)
                 .containsExactly("Z-2", "Z-1", "Z-3");
         // Z-1 下两个 cuisine:C-1 先出现 → 在前
-        Zone z1 = catalog.zones().get(1);
+        Zone z1 = catalog.getZones().get(1);
         assertThat(z1.getCuisines())
                 .extracting(Cuisine::getCuisineId)
                 .containsExactly("C-1", "C-2");
@@ -142,7 +142,7 @@ class CatalogHierarchyAssemblerTest {
         MerchantCatalog catalog = assembler.assemble(merchants);
 
         assertThat(CatalogHierarchyAssembler.maxDepth(catalog)).isEqualTo(3);
-        assertThat(catalog.zones()).hasSize(2);
+        assertThat(catalog.getZones()).hasSize(2);
     }
 
     @Test
@@ -153,15 +153,15 @@ class CatalogHierarchyAssemblerTest {
 
         MerchantCatalog catalog = assembler.assemble(List.of(mInZ1, mInZ2));
 
-        assertThat(catalog.zones()).hasSize(2);
-        assertThat(catalog.zones())
+        assertThat(catalog.getZones()).hasSize(2);
+        assertThat(catalog.getZones())
                 .extracting(Zone::getZoneId)
                 .containsExactly("Z-1", "Z-2");
         // 各自 zone 下只有一个商户,名字分别为 shared-1 / shared-2(同名不同 ID 不应合并)
-        assertThat(catalog.zones().get(0).getCuisines().get(0).getMerchants())
+        assertThat(catalog.getZones().get(0).getCuisines().get(0).getMerchants())
                 .extracting(Merchant::getName)
                 .containsExactly("shared-1");
-        assertThat(catalog.zones().get(1).getCuisines().get(0).getMerchants())
+        assertThat(catalog.getZones().get(1).getCuisines().get(0).getMerchants())
                 .extracting(Merchant::getName)
                 .containsExactly("shared-2");
     }
@@ -174,11 +174,11 @@ class CatalogHierarchyAssemblerTest {
 
         MerchantCatalog catalog = assembler.assemble(List.of(a, b));
 
-        assertThat(catalog.zones()).hasSize(2);
-        assertThat(catalog.zones().get(0).getCuisines().get(0).getMerchants())
+        assertThat(catalog.getZones()).hasSize(2);
+        assertThat(catalog.getZones().get(0).getCuisines().get(0).getMerchants())
                 .extracting(Merchant::getId)
                 .containsExactly("M-A");
-        assertThat(catalog.zones().get(1).getCuisines().get(0).getMerchants())
+        assertThat(catalog.getZones().get(1).getCuisines().get(0).getMerchants())
                 .extracting(Merchant::getId)
                 .containsExactly("M-B");
     }

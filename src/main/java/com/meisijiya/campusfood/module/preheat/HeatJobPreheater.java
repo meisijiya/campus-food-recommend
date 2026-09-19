@@ -2,6 +2,7 @@ package com.meisijiya.campusfood.module.preheat;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -15,14 +16,13 @@ import org.springframework.stereotype.Component;
 import com.meisijiya.campusfood.module.preheat.assembler.CatalogHierarchyAssembler;
 import com.meisijiya.campusfood.module.preheat.assembler.MerchantCatalog;
 import com.meisijiya.campusfood.module.preheat.assembler.Zone;
-import com.meisijiya.campusfood.module.preheat.heat.LikeRepository;
 import com.meisijiya.campusfood.module.preheat.heat.Merchant;
 import com.meisijiya.campusfood.module.preheat.heat.MerchantHeatCalculator;
 import com.meisijiya.campusfood.module.preheat.heat.MerchantRepository;
-import com.meisijiya.campusfood.module.preheat.heat.OrderRepository;
 
 /**
- * 凌晨预热任务(F-4)— 每天 3 点从 MySQL 算热度、拼层级 JSON、按 zone 写 Redis 分片与极热商户 SET。
+ * 凌晨预热任务(F-4)— 每天 3 点从 MySQL 算热度、拼层级 JSON、按 zone 写 Redis 分片、
+ * 写极热商户 SET、回写单 merchant L1 cache 与商户 heat_score。
  *
  * <h2>触发方式</h2>
  * <ul>
@@ -30,18 +30,18 @@ import com.meisijiya.campusfood.module.preheat.heat.OrderRepository;
  *   <li>手动:{@link #preheat()} 由 {@code PreheatAdminController#trigger} 在 dev profile 调用</li>
  * </ul>
  *
- * <h2>流程</h2>
+ * <h2>流程(单次 preheat 全量一次 findAll + 一次 scores,避免 N+1)</h2>
  * <ol>
- *   <li>{@link MerchantHeatCalculator#scores()} 全量热度(0.6 × 订单 + 0.4 × 点赞)</li>
- *   <li>{@link MerchantRepository#findAll()} 取全量 merchants</li>
- *   <li>回写 {@code heat_score} 持久化(保证白天读 L1 一致性 + 下次 cron 起点)</li>
- *   <li>{@link CatalogHierarchyAssembler#assemble(List)} 嵌套成 MerchantCatalog</li>
+ *   <li>{@link MerchantRepository#findAll()} 取全量 merchants(1 次查询)</li>
+ *   <li>{@link MerchantHeatCalculator#scores(List)} 在传入 merchants 上算 heat score(零额外查询)</li>
+ *   <li>{@link MerchantHeatCalculator#topN(List, int)} 取 Top N(零额外查询)</li>
+ *   <li>{@link MerchantRepository#findAllById(Iterable)} 批量回写 heat_score(1 次 SELECT)</li>
+ *   <li>{@link MerchantRepository#saveAll(Iterable)} 批量更新(1 次 UPDATE)</li>
+ *   <li>{@link CatalogHierarchyAssembler#assemble(List)} 嵌套</li>
  *   <li>遍历 zones → 每个 zone 调 {@link RedisShardedWriter#writeZoneCatalog(String, MerchantCatalog)}</li>
- *   <li>{@link MerchantHeatCalculator#topN(int)} 取热度 Top N → {@link RedisShardedWriter#writeHotMerchants(Set)}</li>
+ *   <li>{@link RedisShardedWriter#writeHotMerchants(Set)}</li>
+ *   <li>逐 merchant {@link RedisShardedWriter#writeMerchantCache(String, Merchant)} 回写单 cache</li>
  * </ol>
- *
- * <p>{@link OrderRepository} / {@link LikeRepository} 注入是为 F-5 扩展(F-5 凌晨任务会加时间窗)
- * 留口子;当前不直接使用,经 {@code heatCalculator} 间接消费。
  *
  * @author meisijiya
  */
@@ -60,8 +60,6 @@ class HeatJobPreheater {
 
     HeatJobPreheater(
             MerchantRepository merchants,
-            @SuppressWarnings("unused") OrderRepository orders,
-            @SuppressWarnings("unused") LikeRepository likes,
             MerchantHeatCalculator heatCalculator,
             CatalogHierarchyAssembler assembler,
             RedisShardedWriter writer) {
@@ -91,14 +89,15 @@ class HeatJobPreheater {
         Instant start = Instant.now();
         log.info("HeatJobPreheater preheat start at={}", start);
 
-        // 1. 全量热度
-        Map<String, Double> scores = heatCalculator.scores();
+        // 1. 全量 merchants(1 次 SELECT)
+        List<Merchant> allMerchants = merchants.findAll();
+        log.info("HeatJobPreheater loaded {} merchants", allMerchants.size());
+
+        // 2. 算 heat score(无额外查询)
+        Map<String, Double> scores = heatCalculator.scores(allMerchants);
         log.info("HeatJobPreheater computed scores for {} merchants", scores.size());
 
-        // 2. 全量 merchants
-        List<Merchant> allMerchants = merchants.findAll();
-
-        // 3. 回写 heat_score 持久化
+        // 3. 回写 heat_score 持久化(单 SELECT + 单 UPDATE 批量)
         persistHeatScores(scores);
 
         // 4. 嵌套
@@ -106,8 +105,8 @@ class HeatJobPreheater {
 
         // 5. 写 zone 分片
         int zoneCount = 0;
-        if (catalog.zones() != null) {
-            for (Zone zone : catalog.zones()) {
+        if (catalog.getZones() != null) {
+            for (Zone zone : catalog.getZones()) {
                 if (zone == null || zone.getZoneId() == null || zone.getZoneId().isBlank()) {
                     continue;
                 }
@@ -119,12 +118,19 @@ class HeatJobPreheater {
         }
 
         // 6. 写 hot merchants
-        List<Merchant> hotList = heatCalculator.topN(HOT_TOP_N);
+        List<Merchant> hotList = heatCalculator.topN(allMerchants, HOT_TOP_N);
         Set<String> hotIds = new LinkedHashSet<>();
         for (Merchant m : hotList) {
             hotIds.add(m.getId());
         }
         writer.writeHotMerchants(hotIds);
+
+        // 7. 回写单 merchant L1 cache(便于白天 L1 hit;F-5 Caffeine L0 接入后会减少 Redis 访问)
+        for (Merchant m : allMerchants) {
+            if (m.getId() != null && !m.getId().isBlank()) {
+                writer.writeMerchantCache(m.getId(), m);
+            }
+        }
 
         Instant end = Instant.now();
         long elapsedMs = end.toEpochMilli() - start.toEpochMilli();
@@ -135,18 +141,26 @@ class HeatJobPreheater {
     }
 
     /**
-     * 回写 {@code heat_score} 持久化(可选但推荐):保证下次 cron 起点与 L1 一致性。
+     * 回写 {@code heat_score} 持久化:保证下次 cron 起点与 L1 一致性。
+     *
+     * <p>用 {@link MerchantRepository#findAllById} 批量 SELECT(避免 N 次 findById),
+     * 改 score 后 {@link MerchantRepository#saveAll} 批量 UPDATE。
      */
     private void persistHeatScores(Map<String, Double> scores) {
         if (scores == null || scores.isEmpty()) {
             return;
         }
-        List<Merchant> updated = new ArrayList<>();
-        for (Map.Entry<String, Double> e : scores.entrySet()) {
-            merchants.findById(e.getKey()).ifPresent(m -> {
-                m.setHeatScore(e.getValue());
+        List<Merchant> existing = merchants.findAllById(scores.keySet());
+        if (existing.isEmpty()) {
+            return;
+        }
+        List<Merchant> updated = new ArrayList<>(existing.size());
+        for (Merchant m : existing) {
+            Double s = scores.get(m.getId());
+            if (s != null) {
+                m.setHeatScore(s);
                 updated.add(m);
-            });
+            }
         }
         if (!updated.isEmpty()) {
             merchants.saveAll(updated);

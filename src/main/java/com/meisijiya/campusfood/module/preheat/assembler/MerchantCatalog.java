@@ -55,16 +55,11 @@ public class MerchantCatalog {
         this.zones = zones;
     }
 
-    /** 当前 zones 列表(永不为 null,但可能为空集合)。 */
-    public List<Zone> zones() {
-        return zones;
-    }
-
     public void setZones(List<Zone> zones) {
         this.zones = zones;
     }
 
-    /** Jackson 反序列化入口。 */
+    /** Jackson 反序列化入口(也作为业务访问器)。 */
     public List<Zone> getZones() {
         return zones;
     }

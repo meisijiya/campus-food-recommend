@@ -24,8 +24,13 @@ spring:
     hibernate:
       ddl-auto: update
     properties:
-      # F-4 修复:Hibernate 6 在 MySQL 8.4 启动时查 information_schema.SEQUENCES(MySQL 无此表)失败
-      # 关掉 legacy sequence extractor 跳过该 metadata 查询,改走 dialect 自带的 identity 检测路径
+      # F-4 修复 + 注释:F-4 当前生产环境用 MySQL 8.4 + AUTO_INCREMENT 主键,Hibernate 6 默认会查
+      # information_schema.SEQUENCES(MySQL 无此表)启动失败;关掉 legacy metadata 提取走 identity 检测路径。
+      # ⚠️ 此项仅适用于 "MySQL 8.4 + AUTO_INCREMENT" 现状。若未来引入:
+      #   - 序列型主键(@GeneratedValue(strategy=SEQUENCE))
+      #   - @Formula / @JoinFormula / 视图 schema
+      # 需显式开启 metadata access,否则会静默退化或启动失败。
+      # 见 F-4 review fix(Spec verifier finding #7 关联修复)
       hibernate:
         dialect: ${SPRING_JPA_DIALECT:org.hibernate.dialect.H2Dialect}
       "[hibernate.boot.allow_jdbc_metadata_access]": "false"
@@ -75,6 +80,11 @@ management:
       show-details: when-authorized
       probes:
         enabled: true
+    info:
+      # F-4 review fix:默认禁掉 info endpoint 的 git/build/env 自动暴露;
+      # 如未来要启用 info.*,需显式 allowlist 字段,避免 build/commit/env 变量经
+      # /actuator/info 公开返回(版本泄露 / 内部 hostname / 提交者邮箱)
+      enabled: false
   health:
     # dev profile 不起 Redis/RabbitMQ;禁用 health indicator 避免聚合 DOWN
     # bench / smoke profile(F-5 完成时)再启用

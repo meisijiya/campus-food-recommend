@@ -13,6 +13,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -22,8 +23,6 @@ import org.testcontainers.utility.DockerImageName;
 
 import com.meisijiya.campusfood.module.preheat.heat.Merchant;
 import com.meisijiya.campusfood.module.preheat.heat.MerchantRepository;
-
-import org.springframework.test.context.TestPropertySource;
 
 /**
  * 凌晨预热集成测试(F-4 acceptance #10)— Testcontainers 起 MySQL + Redis,
@@ -122,6 +121,20 @@ class HeatJobPreheaterIT {
         String hotJson = redis.opsForValue().get("catalog:hot:merchants");
         assertThat(hotJson).as("catalog:hot:merchants must be written").isNotNull();
         assertThat(hotJson).contains("M-1").contains("M-2").contains("M-3");
+
+        // then — Redis 单 merchant cache(F-4 review fix:acceptance #7 真 L1 降级链路)
+        String merchant1Json = redis.opsForValue().get("catalog:merchant:M-1");
+        String merchant2Json = redis.opsForValue().get("catalog:merchant:M-2");
+        String merchant3Json = redis.opsForValue().get("catalog:merchant:M-3");
+        assertThat(merchant1Json).as("catalog:merchant:M-1 must be written").isNotNull();
+        assertThat(merchant2Json).as("catalog:merchant:M-2 must be written").isNotNull();
+        assertThat(merchant3Json).as("catalog:merchant:M-3 must be written").isNotNull();
+        assertThat(merchant1Json).contains("M-1").contains("noodle-shop").contains("Z-1");
+        assertThat(merchant2Json).contains("M-2").contains("burger-shop");
+        assertThat(merchant3Json).contains("M-3").contains("pizza-shop").contains("Z-2");
+        // 单 merchant TTL = 10 分钟 = 600s
+        Long m1Ttl = redis.getExpire("catalog:merchant:M-1");
+        assertThat(m1Ttl).as("merchant TTL = 10min = 600s").isBetween(595L, 600L);
 
         // then — TTL
         Long zoneTtl = redis.getExpire("catalog:zone:Z-1");

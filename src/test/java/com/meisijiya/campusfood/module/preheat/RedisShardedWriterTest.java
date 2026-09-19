@@ -26,6 +26,7 @@ import org.springframework.data.redis.core.ValueOperations;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meisijiya.campusfood.module.preheat.assembler.MerchantCatalog;
+import com.meisijiya.campusfood.module.preheat.heat.Merchant;
 
 /**
  * {@link RedisShardedWriter} 单元测试 — 覆盖 zone 分片写入 / key 格式 / TTL /
@@ -142,6 +143,57 @@ class RedisShardedWriterTest {
         assertThatThrownBy(() -> writer.writeZoneCatalog("", new MerchantCatalog()))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> writer.writeZoneCatalog(null, new MerchantCatalog()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ---------- F-4 review fix: writeMerchantCache ----------
+
+    @Test
+    @DisplayName("writeMerchantCache_已知merchant_写入单merchant键并TTL=10min")
+    void writeMerchantCache_presentMerchant_sets600sTtl() throws Exception {
+        when(mapper.writeValueAsString(any())).thenReturn("{\"id\":\"M-1\"}");
+        Merchant m = new Merchant("M-1", "Z-1", "C-1", "noodle", "", 1.0);
+
+        writer.writeMerchantCache("M-1", m);
+
+        ArgumentCaptor<Duration> ttlCaptor = ArgumentCaptor.forClass(Duration.class);
+        verify(ops).set(eq("catalog:merchant:M-1"), eq("{\"id\":\"M-1\"}"), ttlCaptor.capture());
+        assertThat(ttlCaptor.getValue()).isEqualTo(Duration.ofMinutes(10));
+    }
+
+    @Test
+    @DisplayName("writeMerchantCache_nullMerchant_写入负缓存marker_且TTL一致")
+    void writeMerchantCache_nullMerchant_setsNegativeMarker() throws Exception {
+        when(mapper.writeValueAsString(any())).thenReturn("{\"__null__\":true}");
+
+        writer.writeMerchantCache("M-NONEXISTENT", null);
+
+        verify(ops).set(eq("catalog:merchant:M-NONEXISTENT"),
+                eq("{\"__null__\":true}"), any(Duration.class));
+    }
+
+    @Test
+    @DisplayName("writeMerchantCache_空或超长或非法字符merchantId_抛IllegalArgumentException")
+    void writeMerchantCache_invalidMerchantId_throwsIllegalArgument() {
+        Merchant m = new Merchant("M-1", "Z-1", "C-1", "noodle", "", 1.0);
+        assertThatThrownBy(() -> writer.writeMerchantCache("", m))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> writer.writeMerchantCache(null, m))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> writer.writeMerchantCache("a".repeat(65), m))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> writer.writeMerchantCache("has\r\nspace", m))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> writer.writeMerchantCache("has space", m))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("writeZoneCatalog_超长或非法字符zoneId_抛IllegalArgumentException")
+    void writeZoneCatalog_invalidZoneId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> writer.writeZoneCatalog("a".repeat(65), new MerchantCatalog()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> writer.writeZoneCatalog("has\r\ninject", new MerchantCatalog()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

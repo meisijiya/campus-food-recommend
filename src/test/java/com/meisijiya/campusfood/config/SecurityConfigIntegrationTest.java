@@ -34,11 +34,11 @@ class SecurityConfigIntegrationTest {
 
     @Test
     void protectedEndpoint_withoutToken_returns401Json() throws Exception {
-        // /api/auth/refresh 在放行名单里,试一个不在白名单的受保护路径
-        // 这里用 /actuator/info 也是放行的,改用 Spring 默认管理的某个 metrics 接口测
-        // 简单测试:未带 token 调任意受保护路径 — 这里用空 body 的 refresh
-        mockMvc.perform(get("/actuator/info"))
-                .andExpect(status().isOk());
+        // F-4 review fix:验证任意 isAuthenticated() 的受保护端点(而非 /actuator/info — 已改 authenticated)。
+        // 用 /api/merchant/{id} 触发 @PreAuthorize("isAuthenticated()") + SecurityConfig.anyRequest().authenticated()
+        mockMvc.perform(get("/api/merchant/M-1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(40100));
     }
 
     @Test

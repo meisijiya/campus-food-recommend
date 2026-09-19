@@ -42,11 +42,17 @@ class MerchantController {
     /**
      * 单商户详情。路径:{@code GET /api/merchant/{id}}。
      *
-     * @param id 路径变量,商户主键
+     * @param id 路径变量,商户主键(F-4 review fix:加 length 上限防 DoS + 空值短路)
      * @return ApiResponse 包装的 Merchant;商户不存在抛 404(ApiException → GlobalExceptionHandler → 40400 NOT_FOUND)
      */
     @GetMapping("/{id}")
     public ApiResponse<Merchant> getById(@PathVariable String id) {
+        if (id == null || id.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "merchant id must be non-blank");
+        }
+        if (id.length() > 64) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "merchant id length must be <= 64");
+        }
         Merchant merchant = service.findById(id)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "merchant not found: " + id));
         return ApiResponse.ok(merchant);
@@ -55,14 +61,21 @@ class MerchantController {
     /**
      * 按 zoneId 列出商户。路径:{@code GET /api/merchant?zoneId=Z-1}。
      *
-     * <p>空 zoneId 由前端保证,这里不做参数校验(简化 demo;真实场景应加 {@code @NotBlank});
-     * zoneId 不存在时返空列表而非 404,符合"按条件查询"的语义。
+     * <p>F-4 review fix:加 zoneId blank 校验(与 {@code RedisShardedWriter.validateKeySegment}
+     * 契约一致,避免"读路径放行 + 写路径抛 IllegalArgumentException"的双标);
+     * 加 length 上限防 DoS。zoneId 不存在时返空列表而非 404,符合"按条件查询"的语义。
      *
-     * @param zoneId query 参数,校区 / 区域 ID
+     * @param zoneId query 参数,校区 / 区域 ID(非空,长度 ≤ 64)
      * @return ApiResponse 包装的商户列表(可能为空)
      */
     @GetMapping(params = "zoneId")
     public ApiResponse<List<Merchant>> getByZoneId(@RequestParam String zoneId) {
+        if (zoneId == null || zoneId.isBlank()) {
+            return ApiResponse.ok(List.of());
+        }
+        if (zoneId.length() > 64) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "zoneId length must be <= 64");
+        }
         return ApiResponse.ok(service.findByZoneId(zoneId));
     }
 }

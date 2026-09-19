@@ -102,7 +102,7 @@ public class CatalogHierarchyAssembler {
         if (catalog == null) {
             return 0;
         }
-        List<Zone> zones = catalog.zones();
+        List<Zone> zones = catalog.getZones();
         if (zones == null || zones.isEmpty()) {
             // 空目录仍按契约深度返回(便于测试断言 == 3)
             return CATALOG_MAX_DEPTH;
