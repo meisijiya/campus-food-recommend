@@ -45,7 +45,9 @@ class RecommendUser(HttpUser):
             name="/api/auth/login",
         )
         r.raise_for_status()
-        self.token = r.json()["accessToken"]
+        # F-1 ApiResponse 统一包成 {code, message, data} — token 在 data.accessToken
+        # (F-2 写时漏了 data 包裹,本就在 unverified F-4 evidence 阶段才暴露)
+        self.token = r.json()["data"]["accessToken"]
         self.headers = {"Authorization": f"Bearer {self.token}"}
 
     @tag("recommend")
@@ -62,6 +64,21 @@ class RecommendUser(HttpUser):
             "/api/recommend", headers=self.headers, name="/api/recommend"
         )
 
+    @tag("recommend")
+    @task(2)
+    def merchant_detail(self):
+        # 详情读路径 — 真正走 MerchantQueryService L1→L2(F-2 stub skill 不查 DB,/api/recommend 拍不出 L1/L2 差)
+        # merchant 随机选 EVM-000 ~ EVM-099(F-4 evidence seed-100 SQL) — 100 个商人随机抽,
+        # 这样 BEFORE 全部 L2 miss → L1 backfill;AFTER 全 L1 hit(preheat 已烤全 100 人)。
+        # 单一 merchantId(M-NOODLE)不够 — 30 秒后就被打热了,看不出 L1/L2 差距。
+        import random
+        merchant_id = f"EVM-{random.randint(0, 99):03d}"
+        self.client.get(
+            f"/api/merchant/{merchant_id}",
+            headers=self.headers,
+            name="/api/merchant/:id",
+        )
+
 
 class MixLikeDetailUser(HttpUser):
     """F-5 场景:50% 点赞 + 50% 详情读混合流量,验证 P99 < 50ms。"""
@@ -75,10 +92,11 @@ class MixLikeDetailUser(HttpUser):
             name="/api/auth/login",
         )
         r.raise_for_status()
-        self.token = r.json()["accessToken"]
+        # F-1 ApiResponse 统一包成 {code, message, data} — token 在 data.accessToken
+        self.token = r.json()["data"]["accessToken"]
         self.headers = {"Authorization": f"Bearer {self.token}"}
-        # 选一个固定 merchantId 用于点赞(F-5 才用得到,F-1 阶段可能 404)
-        self.merchant_id = "m-001"
+        # 选一个固定 merchantId 用于点赞 — 与 F-4 种子商户对齐(M-NOODLE 由 F-4 smoke 灌入)
+        self.merchant_id = "M-NOODLE"
 
     @tag("mix-like-detail")
     @task
