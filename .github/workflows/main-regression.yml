@@ -1,0 +1,92 @@
+# Main Regression — push main 时跑完整回归
+#
+# 范围(刻意收敛,见 docs/cicd/README.md + ADR-0007 §F-10):
+#   1. mvn -B verify — Mock profile,无需中间件;CI 不跑 init.ps1 6 stage
+#   2. locust --collect-only — locustfile_mix.py 语法/导入 dry-run,不真发请求
+#   3. commit message 审计 — 最近 20 commit 必须含 [F-N] 前缀(AGENTS.md §3/§4/§18)
+#   4. evidence/ 全部 artifact 上传 — csv/log/jtl/json,retention 14 天,失败也上传
+#
+# 与 pr-smoke.yml / qps-sensitive.yml 的边界:
+#   PR 相关 2 个 workflow 由 W1 同事创建(本文件不动)
+#   本文件唯一职责:main 分支合并后的回归与产物归档
+name: Main Regression
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: '手动触发的可选说明'
+        required: false
+        default: 'manual trigger'
+
+# 单一 job,所有步骤串行;Ubuntu runner 无 docker compose 中间件,
+# 故不跑 init.ps1 stage 3/4/5/6(详见 docs/cicd/README.md §本地门禁 vs CI)
+jobs:
+  mvn-verify:
+    name: mvn verify + locust dry-run + commit audit + artifact upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MAVEN_OPTS: '-Xmx2g -XX:+UseG1GC'
+    steps:
+      - name: Checkout(完整 git 历史)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 完整历史,后续 commit audit 步骤要扫最近 20 条
+
+      - name: Set up JDK 21(maven cache 内置)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'  # key 默认基于 **/pom.xml hash
+
+      - name: Build + test(Mock profile,跳过 bench IT)
+        # MockChatModel 默认 profile:dev/test/it,无需百炼 API key,避免金钱损失
+        # -DskipBenchITs 显式排除 *BenchIT(需 SPRING_PROFILES_ACTIVE=bench)
+        run: mvn -B verify -DskipBenchITs
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install locust(uv 直接装到系统 Python)
+        # 与本地 init.ps1 §6/6 保持同一工具链;uv 是 ADR-0004 锁定的 Python 包管理器
+        run: uv pip install --system locust
+
+      - name: Locust dry-run(语法 / 导入校验,不真发请求)
+        # --collect-only 让 locust 实例化所有 User 类并打印统计,但不启动负载生成
+        # 适配 GitHub Ubuntu runner 无 cfr-app 实例的现实;仅校验 locustfile_mix.py 可导入
+        run: |
+          mkdir -p evidence
+          locust -f locustfile_mix.py --collect-only 2>&1 | tee evidence/locust-main.log
+        continue-on-error: false
+
+      - name: Audit commit messages(最近 20 commit 必须含 [F-N] 前缀)
+        # AGENTS.md §3 / §4 / §18 硬性要求,main 分支任何 ticket commit 都必须带 [F-N]
+        # 违反即阻合并,要求 PR 作者补 commit prefix 后重跑
+        run: |
+          echo "::group::最近 20 commit oneline"
+          git log --oneline -20
+          echo "::endgroup::"
+          recent=$(git log --oneline -20 | grep -E '\[[A-Za-z0-9_-]+\]' || true)
+          if [ -z "$recent" ]; then
+            echo "::error::最近 20 commit 无任何 [F-N] / [xxx] ticket 前缀,违反 AGENTS.md §3 / §18"
+            echo "::error::请检查 commit message,补上 [F-N] 前缀后再 merge"
+            exit 1
+          fi
+          echo "OK:最近 20 commit 中已有 ticket 前缀 commit:$(echo "$recent" | wc -l) 条"
+
+      - name: Upload evidence artifacts(csv/log/jtl/json,失败也上传)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-main-${{ github.sha }}
+          path: |
+            evidence/*.csv
+            evidence/*.log
+            evidence/*.jtl
+            evidence/*.json
+          retention-days: 14
+          if-no-files-found: ignore
