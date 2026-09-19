@@ -238,5 +238,82 @@ F-1(无依赖)  →  F-2 / F-3 / F-4(互相独立)
 | 0003 | 版本表与 JDK 21 升级 | 已采纳 |
 | 0004 | locust 替代 wrk | 已采纳 |
 | **0005** | F-1 evidence 用 JMeter（locust 在 Windows GIL 受限，5000+ QPS bullet 跨不过） | 已采纳 |
+| **0006** | F-6 Demo Readiness 范围(招实习 demo 化 hardening) | 已采纳 |
+| **0007** | F-7~F-12 多 ticket 路线图(限流/锁/可观测性/CI/灰度/简历包装) | 已采纳 |
 
 任何后续 ADR 直接追加,编号 `0006` 起;**ADR 只增不删**(§9)。
+
+---
+
+## 18. Multi-Agent Boundaries(2026-09-20 多 worker 委派解锁)
+
+> **状态**:启用(2026-09-20 F-7 / F-8 / F-9 阶段首次正式启用)
+> **触发**:F-6 done 后进入 F-7~F-12 实战新 bullet 阶段(ADR-0007),3 张 ticket 依赖解耦但共享 LikeService / RecommendService / MerchantQueryService 等热点文件。
+
+### 18.1 解锁条件
+
+AGENTS.md §11 强制 "one ticket at a time",但 F-4 / F-5 已实际通过 3 worker 并行落地(详见 `05-F5-cache-consistency.md` 工程进度段)。本节正式补齐 §11 要求的多代理前置定义,把"实践已并行"提升为"约定已并行"。
+
+### 18.2 启用场景
+
+满足以下**全部**条件才允许多 worker 并行:
+
+1. **依赖已闭环**:并行 ticket 全部 `Blocked by:` 段的 ticket 已 done(查工单顶部)。
+2. **scope 解耦**:每个 worker 拥有独立的"主路径文件集",不在同一文件主区域编辑(只读允许)。
+3. **冲突预案**:跨 ticket 共享文件(如 `LikeService.like()`)必须明确"由谁先动 + 谁后动"或"由 orchestrator 串行合并",不允许两个 worker 并发改同一行。
+5. **用户授权**:本会话内用户已通过 ask_user 显式确认走多 worker 并行(本节记录在 2026-09-20 00:17 用户回复)。
+
+### 18.3 并行模式
+
+| 模式 | 适用 | 切分原则 |
+|---|---|---|
+| **单 ticket 三 worker(W1/W2/W3)** | 单 ticket 内多模块(如 F-4 数据层/装配层/查询层;F-5 Like/Caffeine/IT) | 按代码层次切,主路径文件不重叠 |
+| **多 ticket 各 worker** | 多张 ticket 同时在依赖图中可启动 | 每 ticket 独立 worker 池,跨 ticket 共享文件由 orchestrator 串行合并 |
+| **混合模式**(F-7~F-9 当前采用) | 多张 ticket 同时进入,且每张内可继续切 W1/W2/W3 | 9 worker 同时 dispatch,3 ticket × 3 worker,跨 ticket 冲突文件 orchestrator 收尾合并 |
+
+### 18.4 文件所有权表(F-7~F-9 阶段)
+
+> **唯一所有权**:同一文件的同一方法,只允许一个 worker 编辑。其他 worker 只读。
+
+| 文件 | 主编辑 worker | 只读 worker | 备注 |
+|---|---|---|---|
+| `module/ratelimit/**` 全新增 | **F-7 W1** + **F-7 W2** | F-7 W3 | W1 = Lua+接口;W2 = Caffeine降级+Filter;W3 = 测试 |
+| `config/SecurityConfig.java`(放行 /actuator/prometheus 等) | **F-9 W2** | F-7 W2 (Filter 顺序) | F-7 W2 与 F-9 W2 互不修改对方区域 |
+| `module/like/LikeService.java` | **F-8 W2**(加 distributed lock)+ **F-9 W1**(加 Counter metric) | — | **冲突点**:同一文件两个方法,两个 worker 各自加一段。orchestrator 串行合并:先 F-8 加锁 → 后 F-9 加埋点。 |
+| `module/preheat/HeatJobPreheater.java` | **F-8 W2** | — | 仅 F-8 W2 修改 |
+| `module/recommend/RecommendService.java` | **F-9 W1**(Timer metric) | — | 仅 F-9 W1 |
+| `module/catalog/MerchantQueryService.java` | **F-9 W1 / F-9 W2**(Gauge metric) | — | F-9 W1 加 Timer,Gauge 在 W2 |
+| `module/catalog/session/SessionService.java` | **F-9 W2**(stage Gauge) | — | F-9 W2 |
+| `docker/observability/**` + `docker-compose.yml`(新增 prometheus/grafana) | **F-9 W2** | — | 仅 F-9 W2 |
+| `application.yml`(新增 management.prometheus.metrics.export 等) | **F-9 W2** | — | 仅 F-9 W2 |
+| `application.yml`(新增 rate-limit 配置) | **F-7 W1** | — | 仅 F-7 W1 |
+| `evidence/f7-*.csv` / `f8-*.csv` / `f9-*.csv` | 各 ticket 自身 worker | — | `.gitignore` 已排除 `evidence/*.csv` |
+
+### 18.5 冲突解决顺序(orchestrator 串行收尾)
+
+如出现主编辑重叠,按以下顺序合并:
+
+1. **F-7 W1 → F-7 W2 → F-7 W3** (同 ticket 内串行,各 worker git add + commit 独立分支由 orchestrator rebase)
+2. **F-8 W1 → F-8 W2 → F-8 W3**
+3. **F-9 W1 → F-9 W2 → F-9 W3**
+4. **跨 ticket 共享文件**(如 `LikeService`):**F-8 W2 先 → F-9 W1 后** —— 因为 F-8 的锁包裹整个方法体,F-9 的 Counter 应在锁内 try/finally 或锁外,前者更内聚;先做锁再做埋点。
+5. **最终**:orchestrator 跑 `mvn -B verify` + `pwsh -File init.ps1` 6/6 stage + `git log --oneline` 审计每条 commit 含 `[F-N]` 前缀。
+
+### 18.6 撤场条件
+
+任一条件触发即回退到 §11 单 ticket 模式:
+
+- 任一 worker 失败且修复成本 > 1 ticket 时间
+- 跨 ticket 共享文件合并冲突 > 3 处需要人工决策
+- orchestrator 串行收尾后 `mvn verify` 红
+
+回退路径:删除 worker 提交,回到上一次 `mvn verify` 绿的状态,改串行做当前 ticket。
+
+### 18.7 不变量(并行模式不得破坏)
+
+- 包名前缀 `com.meisijiya.campusfood.*` 不变
+- Spring Boot 3.x + JDK 21 不变
+- 不引入简历技术栈之外的中间件(MySQL / Redis / RabbitMQ / Caffeine / Spring AI + Prometheus / Grafana,后者为本节显式授权)
+- ADR 只增不删
+- `init.sh` / `init.ps1` 仍为单一可执行约束
+- **commit 信息必含 `[F-N]` 前缀**(F-7 / F-8 / F-9 各 worker commit 也含,如 `[F-7][W1]`)

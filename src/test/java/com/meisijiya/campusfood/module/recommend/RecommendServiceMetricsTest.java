@@ -127,11 +127,13 @@ class RecommendServiceMetricsTest {
         assertThat(fallbackTimer).isNotNull();
         assertThat(fallbackTimer.count()).isEqualTo(1L);
 
-        // mock / dashscope timer 不应有数据
-        assertThat(meterRegistry.find(MicrometerConfig.RECOMMEND_LATENCY)
-                .tag("hit_tier", "mock").timer().count()).isEqualTo(0L);
-        assertThat(meterRegistry.find(MicrometerConfig.RECOMMEND_LATENCY)
-                .tag("hit_tier", "dashscope").timer().count()).isEqualTo(0L);
+        // mock / dashscope timer 不应有数据(Search.timer() 未注册时返 null,需先判空)
+        Timer mockTimer = meterRegistry.find(MicrometerConfig.RECOMMEND_LATENCY)
+                .tag("hit_tier", "mock").timer();
+        Timer dashscopeTimer = meterRegistry.find(MicrometerConfig.RECOMMEND_LATENCY)
+                .tag("hit_tier", "dashscope").timer();
+        assertThat(mockTimer == null || mockTimer.count() == 0L).isTrue();
+        assertThat(dashscopeTimer == null || dashscopeTimer.count() == 0L).isTrue();
     }
 
     @Test

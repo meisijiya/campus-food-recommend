@@ -173,18 +173,8 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <!-- F-7 W2 收尾:ratelimit 模块编译已修复;移除该 worker 范围内的 ratelimit exclusion。
-                         其他模块(like/recommend/preheat/lock/observability)的临时 exclusion 由对应 worker 移除。 -->
-                    <testExcludes>
-                        <!-- F-9 W2 临时绕过:多人并行下多个模块的测试与未合并的 lock/ratelimit 主代码不对齐,
-                             等 F-7/F-8 主代码串行合并后由 orchestrator 移除此 exclusion -->
-                        <exclude>com/meisijiya/campusfood/module/like/LikeServiceMetricsTest.java</exclude>
-                        <exclude>com/meisijiya/campusfood/module/recommend/RecommendServiceMetricsTest.java</exclude>
-                        <exclude>com/meisijiya/campusfood/module/recommend/advisor/RuleBasedFallbackAdvisorTest.java</exclude>
-                        <exclude>com/meisijiya/campusfood/module/preheat/HeatJobPreheaterIT.java</exclude>
-                        <exclude>com/meisijiya/campusfood/module/lock/DistributedLockIT.java</exclude>
-                        <!-- F-9 W3:observability exclusion 由 W3 worker 移除(注释指引),让 ObservabilityIT 编译并由 failsafe 跑。 -->
-                    </testExcludes>
+                    <!-- Orchestrator 收尾:9 worker 全部 commit 落地,F-7/F-8/F-9 主代码与测试已对齐;
+                         移除所有并行期临时 exclusion,恢复全量 Surefire 跑全部 *Test.java。 -->
                 </configuration>
             </plugin>
             <plugin>

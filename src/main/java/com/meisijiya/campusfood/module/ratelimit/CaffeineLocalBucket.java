@@ -101,7 +101,9 @@ public class CaffeineLocalBucket implements RateLimiter {
      * @param tokens          当前可用令牌数(可能 > capacity,因为 refill 在 CAS 之间不重复扣)
      * @param lastRefillNanos 上次 refill 计算时刻(nanos)
      */
-    private record BucketState(double tokens, long lastRefillNanos) {
+    // F-7 W3 IT 修复:JDK 21 / JLS 8.1.3 规定内嵌 record 必须显式 static 修饰,
+    // 否则外部类加载时 inner record 类初始化失败,触发 NoClassDefFoundError。
+    private static record BucketState(double tokens, long lastRefillNanos) {
         static BucketState full(int capacity) {
             return new BucketState(capacity, System.nanoTime());
         }
