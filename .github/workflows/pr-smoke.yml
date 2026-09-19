@@ -55,16 +55,11 @@ jobs:
           uv pip install --python .venv/bin/python locust
 
       # PR smoke 不起 app,只验证 locustfile_mix.py 可导入 + User 类注册。
-      # locust 2.x 已移除 --collect-only;改用 python import 校验
+      # locust 2.x 已移除 --collect-only;改用 python import 校验(单行 semicolon 避 YAML 缩进问题)
       - name: Locust smoke (import validation)
         run: |
           mkdir -p evidence
-          .venv/bin/python -c "
-import sys
-sys.path.insert(0, '.')
-import locustfile_mix  # noqa
-print('locustfile_mix.py imports OK; User classes registered')
-" 2>&1 | tee evidence/locust-pr-smoke.log
+          .venv/bin/python -c "import sys; sys.path.insert(0, '.'); import locustfile_mix; print('locustfile_mix.py imports OK; User classes registered')" 2>&1 | tee evidence/locust-pr-smoke.log
 
       # 始终上传,即使前面失败(便于事后排查)
       - name: Upload locust smoke log

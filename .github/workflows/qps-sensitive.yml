@@ -48,16 +48,11 @@ jobs:
           uv venv .venv
           uv pip install --python .venv/bin/python locust
 
-      # locust 2.x 已移除 --collect-only;改用 python import 校验
+      # locust 2.x 已移除 --collect-only;改用 python import 校验(单行 semicolon 避 YAML 缩进问题)
       - name: Locust smoke (import validation)
         run: |
           mkdir -p evidence
-          .venv/bin/python -c "
-import sys
-sys.path.insert(0, '.')
-import locustfile_mix  # noqa
-print('locustfile_mix.py imports OK; User classes registered')
-" 2>&1 | tee evidence/locust-qps-smoke.log
+          .venv/bin/python -c "import sys; sys.path.insert(0, '.'); import locustfile_mix; print('locustfile_mix.py imports OK; User classes registered')" 2>&1 | tee evidence/locust-qps-smoke.log
 
       - name: Upload locust smoke log
         if: always()
