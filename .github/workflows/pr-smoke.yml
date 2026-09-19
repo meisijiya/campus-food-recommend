@@ -47,7 +47,8 @@ jobs:
         run: pip install --upgrade uv
 
       - name: Install locust (uv, system)
-        run: uv pip install --system locust
+        # Ubuntu runner 默认 Python 3.12 启用 PEP 668,需 --break-system-packages
+        run: uv pip install --system --break-system-packages locust
 
       # PR smoke 不起 app,只验证 locustfile_mix.py 语法 OK + 装好环境。
       # --collect-only 让 locust 加载 User 类但不调度任何请求
