@@ -179,10 +179,8 @@
                         <!-- F-9 W2 临时绕过:多人并行下多个模块的测试与未合并的 lock/ratelimit 主代码不对齐,
                              等 F-7/F-8 主代码串行合并后由 orchestrator 移除此 exclusion -->
                         <exclude>com/meisijiya/campusfood/module/like/LikeServiceMetricsTest.java</exclude>
-                        <exclude>com/meisijiya/campusfood/module/like/LikeServiceTest.java</exclude>
                         <exclude>com/meisijiya/campusfood/module/recommend/RecommendServiceMetricsTest.java</exclude>
                         <exclude>com/meisijiya/campusfood/module/recommend/advisor/RuleBasedFallbackAdvisorTest.java</exclude>
-                        <exclude>com/meisijiya/campusfood/module/preheat/HeatJobPreheaterTest.java</exclude>
                         <exclude>com/meisijiya/campusfood/module/preheat/HeatJobPreheaterIT.java</exclude>
                         <exclude>com/meisijiya/campusfood/module/lock/DistributedLockIT.java</exclude>
                         <exclude>com/meisijiya/campusfood/observability/**/*.java</exclude>

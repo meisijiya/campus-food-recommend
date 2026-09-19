@@ -3,6 +3,7 @@ package com.meisijiya.campusfood.module.like;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -27,16 +28,17 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.meisijiya.campusfood.common.exception.ApiException;
 import com.meisijiya.campusfood.config.MicrometerConfig;
 import com.meisijiya.campusfood.config.RabbitMQConfig;
+import com.meisijiya.campusfood.module.lock.RedisLock;
 
 /**
- * {@link LikeService} 单元测试(F-5 B-5 bullet)— 覆盖首次成功 + 60s 幂等 + 参数校验 4 路径。
+ * {@link LikeService} 单元测试(F-5 B-5 bullet + F-9 Counter + F-8 W2 锁集成)— 覆盖首次成功 + 60s 幂等 +
+ * 参数校验 4 路径。
  *
  * <p>测试纪律:纯 Mockito + AssertJ,不连真实 Redis / RabbitMQ;关键参数(Redis key / TTL /
  * RabbitTemplate 目标 exchange)用 {@link ArgumentCaptor} 抓取断言。
  *
- * <p>不需要 {@code @ExtendWith(MockitoExtension.class)} — 这里手写 {@link MockitoExtension}
- * 用不到的 setUp(直接 {@code mock(...)})即可;沿袭 {@code MerchantHeatCalculatorTest}
- * 的风格。
+ * <p>F-8 集成:setUp 默认 {@code redisLock.tryLock} 返 {@code true}(让 F-5/F-9 既有断言专注
+ * 幂等 + 参数校验 + Counter);锁竞争场景由 {@link LikeServiceLockTest} 覆盖。
  *
  * @author meisijiya
  */
@@ -46,6 +48,7 @@ class LikeServiceTest {
     private ValueOperations<String, String> ops;
     private RabbitTemplate rabbit;
     private MicrometerConfig micrometerConfig;
+    private RedisLock redisLock;
     private LikeService service;
 
     @BeforeEach
@@ -59,8 +62,12 @@ class LikeServiceTest {
         // micrometerConfig.likeCounter("like").increment(),底层 meter 是 SimpleMeterRegistry 的)。
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         micrometerConfig = new MicrometerConfig(meterRegistry);
+        // F-8 W2:LikeService 构造器追加 RedisLock;默认 mock 让 tryLock=true(走通 F-5/F-9 既有断言)。
+        redisLock = mock(RedisLock.class);
+        when(redisLock.tryLock(anyString(), anyString(), anyLong())).thenReturn(true);
+        when(redisLock.release(anyString(), anyString())).thenReturn(true);
         when(redis.opsForValue()).thenReturn(ops);
-        service = new LikeService(redis, rabbit, micrometerConfig);
+        service = new LikeService(redis, rabbit, micrometerConfig, redisLock);
     }
 
     @Test

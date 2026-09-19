@@ -7,12 +7,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.meisijiya.campusfood.module.lock.RedisLock;
 import com.meisijiya.campusfood.module.preheat.assembler.CatalogHierarchyAssembler;
 import com.meisijiya.campusfood.module.preheat.assembler.MerchantCatalog;
 import com.meisijiya.campusfood.module.preheat.assembler.Zone;
@@ -29,6 +31,13 @@ import com.meisijiya.campusfood.module.preheat.heat.MerchantRepository;
  *   <li>自动:{@link #run()} 由 {@link Scheduled @Scheduled(cron="0 0 3 * * ?")} 在凌晨 3 点触发</li>
  *   <li>手动:{@link #preheat()} 由 {@code PreheatAdminController#trigger} 在 dev profile 调用</li>
  * </ul>
+ *
+ * <h2>F-8 多实例防重</h2>
+ * <p>{@link #run()} 与 {@link #preheat()} 入口都加分布式锁({@link RedisLock#tryLock}),确保
+ * 同一时刻只有一个 JVM 跑预热;竞争失败 INFO 日志后直接 skip。两个入口共用同一把锁
+ * {@link #LOCK_KEY},由 {@link #doPreheat()} 私有方法承担实际工作 — 若两入口都直接调
+ * {@link #doPreheat()} 而 preheat 内部又 tryLock 同一 key,会出现同 JVM 嵌套取锁失败
+ * (cron path 实际不执行工作)的 deadlock。
  *
  * <h2>流程(单次 preheat 全量一次 findAll + 一次 scores,避免 N+1)</h2>
  * <ol>
@@ -53,39 +62,85 @@ class HeatJobPreheater {
     /** 极热商户 SET 容量。 */
     static final int HOT_TOP_N = 10;
 
+    /** F-8 分布式锁 key — 所有 cfr-app 实例共用,确保预热防重(参见 ADR-0007 §F-8)。 */
+    static final String LOCK_KEY = "lock:preheat:heat-job";
+
+    /**
+     * F-8 分布式锁 TTL:30 分钟 — 预热单实例最长容忍时长(实测 F-4 千商户级 ~10s,30 分钟
+     * 是极大保守值);不注册 {@code Watchdog} 续期,过期即让另一实例接手 — 业务侧可接受
+     * "锁过期但旧实例仍在写"的语义,因为 {@code writeZoneCatalog / writeHotMerchants /
+     * writeMerchantCache} 全是 {@code SET} 幂等写入,后写覆盖前写。
+     */
+    static final long LOCK_TTL_SEC = 1800L;
+
     private final MerchantRepository merchants;
     private final MerchantHeatCalculator heatCalculator;
     private final CatalogHierarchyAssembler assembler;
     private final RedisShardedWriter writer;
+    private final RedisLock redisLock;
 
     HeatJobPreheater(
             MerchantRepository merchants,
             MerchantHeatCalculator heatCalculator,
             CatalogHierarchyAssembler assembler,
-            RedisShardedWriter writer) {
+            RedisShardedWriter writer,
+            RedisLock redisLock) {
         this.merchants = merchants;
         this.heatCalculator = heatCalculator;
         this.assembler = assembler;
         this.writer = writer;
+        this.redisLock = redisLock;
     }
 
     /**
      * 凌晨 3 点 cron 触发(Spring 6 字段格式:秒 分 时 日 月 周;{@code "0 0 3 * * ?"} = 秒=0 分=0 时=3 *)。
      *
-     * <p>由 {@code CampusFoodApplication#@EnableScheduling} 激活。
+     * <p>由 {@code CampusFoodApplication#@EnableScheduling} 激活。多实例部署时,只有抢到
+     * {@link #LOCK_KEY} 的实例真正跑预热;其余 skip + INFO 日志。
+     *
+     * <p>注意:本方法不直接调 {@link #preheat()}(后者有自己的 tryLock)— 同一 JVM
+     * 嵌套取同一 key 会 deadlock(见类注释)。改调 {@link #doPreheat()}。
      */
     @Scheduled(cron = "0 0 3 * * ?")
     public void run() {
         log.info("HeatJobPreheater scheduled run start");
-        preheat();
+        String token = UUID.randomUUID().toString();
+        if (!redisLock.tryLock(LOCK_KEY, token, LOCK_TTL_SEC)) {
+            log.info("HeatJobPreheater skipped: another instance running");
+            return;
+        }
+        try {
+            doPreheat();
+        } finally {
+            redisLock.release(LOCK_KEY, token);
+        }
     }
 
     /**
-     * 公开预热入口(供 {@code PreheatAdminController} 手动触发)。
+     * 公开预热入口(供 {@code PreheatAdminController} 手动触发)。多实例部署时手动触发也
+     * 走 {@link #LOCK_KEY} 防重;竞争失败返 {@code null}。
      *
-     * @return 摘要:时间戳 + 商家数 + zone 数 + 极热商户数 + 耗时 ms
+     * @return 摘要:时间戳 + 商家数 + zone 数 + 极热商户数 + 耗时 ms;若锁竞争失败返 {@code null}
      */
     PreheatSummary preheat() {
+        String token = UUID.randomUUID().toString();
+        if (!redisLock.tryLock(LOCK_KEY, token, LOCK_TTL_SEC)) {
+            log.info("HeatJobPreheater skipped: another instance running");
+            return null;
+        }
+        try {
+            return doPreheat();
+        } finally {
+            redisLock.release(LOCK_KEY, token);
+        }
+    }
+
+    /**
+     * 预热主体 — 由 {@link #run()} 与 {@link #preheat()} 在获取锁后调用。body 复用 F-4
+     * 既有 7 步流程(findAll → scores → persist → assemble → writeZone × N → topN →
+     * writeHot → writeMerchantCache × N),保持单实例 N+1 优化纪律。
+     */
+    private PreheatSummary doPreheat() {
         Instant start = Instant.now();
         log.info("HeatJobPreheater preheat start at={}", start);
 

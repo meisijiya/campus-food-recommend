@@ -3,6 +3,7 @@ package com.meisijiya.campusfood.module.preheat;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -16,9 +17,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.meisijiya.campusfood.module.lock.RedisLock;
 import com.meisijiya.campusfood.module.preheat.assembler.CatalogHierarchyAssembler;
 import com.meisijiya.campusfood.module.preheat.assembler.Cuisine;
 import com.meisijiya.campusfood.module.preheat.assembler.MerchantCatalog;
@@ -36,19 +39,34 @@ import com.meisijiya.campusfood.module.preheat.heat.MerchantRepository;
  *   <li>摘要字段(merchantCount / zoneCount / hotCount / elapsedMs >= 0)</li>
  *   <li>边界(空 merchants / 空 zones / null zones / blank zoneId)</li>
  *   <li>性能:HeatJobPreheater 不再依赖 calculator 的无参 API,避免重复 findAll</li>
+ *   <li>F-8 集成:RedisLock mock 默认 tryLock=true(让 F-4 既有断言专注 preheat body 编排);
+ *       锁竞争场景由 {@link HeatJobPreheaterLockTest} 覆盖。</li>
  * </ul>
  *
  * @author meisijiya
  */
 class HeatJobPreheaterTest {
 
-    private final MerchantRepository merchants = mock(MerchantRepository.class);
-    private final MerchantHeatCalculator heatCalculator = mock(MerchantHeatCalculator.class);
-    private final CatalogHierarchyAssembler assembler = mock(CatalogHierarchyAssembler.class);
-    private final RedisShardedWriter writer = mock(RedisShardedWriter.class);
+    private MerchantRepository merchants;
+    private MerchantHeatCalculator heatCalculator;
+    private CatalogHierarchyAssembler assembler;
+    private RedisShardedWriter writer;
+    private RedisLock redisLock;
+    private HeatJobPreheater preheater;
 
-    private final HeatJobPreheater preheater = new HeatJobPreheater(
-            merchants, heatCalculator, assembler, writer);
+    @BeforeEach
+    void setUp() {
+        merchants = mock(MerchantRepository.class);
+        heatCalculator = mock(MerchantHeatCalculator.class);
+        assembler = mock(CatalogHierarchyAssembler.class);
+        writer = mock(RedisShardedWriter.class);
+        redisLock = mock(RedisLock.class);
+        // F-8 默认锁可用 — 既有 F-4 编排断言不关心锁语义
+        when(redisLock.tryLock(anyString(), anyString(), anyLong())).thenReturn(true);
+        when(redisLock.release(anyString(), anyString())).thenReturn(true);
+        preheater = new HeatJobPreheater(
+                merchants, heatCalculator, assembler, writer, redisLock);
+    }
 
     private static Merchant merchant(String id, String zoneId, String cuisineId) {
         return new Merchant(id, zoneId, cuisineId, "name-" + id, "", 0.0);
