@@ -247,8 +247,9 @@ class DistributedLockIT {
         // 显式断言 maxExtendFailures=3(默认值,Lua 续期必然失败因为 key 不存在)
         int maxFailures = 3;
 
-        // when — tick 3 次,每次 RedisLock.extend 都因 key 不存在返 false
-        for (int i = 1; i <= maxFailures; i++) {
+        // when — tick maxFailures 次,每次 RedisLock.extend 都因 key 不存在返 false
+        // Watchdog 语义:failCount 累加,达到 maxFailures 时移除 — 即第 maxFailures 次 tick 末尾已移除
+        for (int i = 1; i < maxFailures; i++) {
             watchdog.tick();
             // 累加但未到上限前,注册表仍保留该 key
             assertThat(watchdog.registeredCount())
@@ -256,8 +257,7 @@ class DistributedLockIT {
                     .isEqualTo(1);
         }
 
-        // then — 第 3 次 tick 触发"达到 maxExtendFailures"分支,从注册表移除
-        // (loop 在 maxFailures=3 时第 3 次 tick 末尾已移除;为保险再 tick 一次断言稳定空)
+        // then — 第 maxFailures 次 tick 触发"达到 maxExtendFailures"分支,从注册表移除
         watchdog.tick();
         assertThat(watchdog.registeredCount())
                 .as("after exceeding maxExtendFailures, Watchdog must remove the lock from registry")
