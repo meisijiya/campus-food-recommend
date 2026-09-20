@@ -118,6 +118,8 @@ F-1 必须先做(其他 ticket 都依赖它建好的工程脚手架与鉴权骨�
 - 不引入简历技术栈之外的中间件(MySQL / Redis / RabbitMQ / Caffeine / Spring AI 是天花板)。
 - ADR 只增不删;过时 ADR 加"已废止"标记但保留正文。
 - `init.sh` 必须可独立运行,依赖在脚本内声明或写在 README,不靠外部环境魔法。
+- **JMeter 压测计划必须含 pre-warm 阶段**(建议 30s):JVM 冷启动 + JIT 优化中,前 30s 数字偏低是预期,稳态 60s 才是 bullet 的有效 evidence。2026-09-21 F-1 复审触发:F-11 完工后重测得 3663 RPS(cold start),独立复测 3 次稳态均值 5243 RPS——若只采单次 cold start,会误判 bullet 不成立。
+- **Cross-cutting 量化声明改动必须全仓 grep**(bullet / 阈值 / 合规率 / RPS / P99 / 延迟):影响面 ≥ 13 处(.github/workflows / init.sh / ADR / locustfile docstring / application.yml 注释 / scripts/demo 等),初始单次 grep 不够;若 Verifier 复审发现遗漏,撤回整轮改动而不只是补遗漏。2026-09-21 F-1 bullet 修订时单次 grep 仅覆盖 4 处,Verifier 找 13 处遗漏 → 用户决策撤回而非补全。
 
 ---
 
