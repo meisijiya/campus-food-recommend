@@ -90,6 +90,9 @@ services:
       # F-1 完成态启用 Redis/RabbitMQ 健康检查(已就绪 + 可达)
       MANAGEMENT_HEALTH_REDIS: true
       MANAGEMENT_HEALTH_RABBIT: true
+      # F-9 修复 #2:补传 MANAGEMENT_PROMETHEUS_EXPORT 到容器,否则 shell env 无法渗透,
+      # cfr-prometheus scrape 一直空。设 true 后 /actuator/prometheus 暴露,Prometheus / Grafana 才有数据。
+      MANAGEMENT_PROMETHEUS_EXPORT: ${MANAGEMENT_PROMETHEUS_EXPORT:-false}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health >/dev/null 2>&1 || exit 1"]
       interval: 10s
