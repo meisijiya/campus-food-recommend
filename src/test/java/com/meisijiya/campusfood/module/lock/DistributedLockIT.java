@@ -119,7 +119,7 @@ class DistributedLockIT {
     @DisplayName("tryLock_首次获取_返回true_且Redis写入key带TTL_release后key消失")
     void tryLock_firstAcquire_returnsTrue_andKeyDisappearsAfterRelease() {
         testKey = "lock:it:basic:" + UUID.randomUUID();
-        String token = UUID.randomUUID();
+        String token = UUID.randomUUID().toString();
 
         // when — 首次获取
         boolean acquired = redisLock.tryLock(testKey, token, 30);
@@ -204,7 +204,7 @@ class DistributedLockIT {
     @DisplayName("watchdog_register后tick_锁TTL被续到目标值_且key持续存在")
     void watchdog_registerAndTick_extendsTtl_andKeyRemains() {
         testKey = "lock:it:extend:" + UUID.randomUUID();
-        String token = UUID.randomUUID();
+        String token = UUID.randomUUID().toString();
 
         // 给一个非常短的初始 TTL=2s,如果 Watchdog 不续期,2s 后 key 自动消失
         assertThat(redisLock.tryLock(testKey, token, 2))
@@ -239,7 +239,7 @@ class DistributedLockIT {
     @DisplayName("watchdog_锁已过期tickN次_failCount累加达上限_从注册表移除")
     void watchdog_lockExpiredConsecutiveFails_unregistersAfterMaxFailures() {
         testKey = "lock:it:giveup:" + UUID.randomUUID();
-        String token = UUID.randomUUID();
+        String token = UUID.randomUUID().toString();
 
         // 直接 register(不调 tryLock — 模拟"业务已持锁但 Redis 端 key 因某种原因已消失"边界)
         assertThat(watchdog.register(testKey, token, 30_000L))
