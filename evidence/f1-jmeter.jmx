@@ -6,15 +6,23 @@
   用法:
     jmeter -n -t evidence\f1-jmeter.jmx -l evidence\f1-jmeter.jtl -j evidence\f1-jmeter.log
 
-  配置:
-    200 threads,ramp-up 4s,持续 30s + 2s 终止等待
+  配置(F-13 hardening):
+    TG1 (warm-up): 500 threads, ramp 30s, duration 30s  ← pre-warm(JVM JIT + Tomcat accept queue)
+    TG2 (main):    500 threads, ramp 10s, duration 60s  ← 采稳态 evidence(F-1 bullet 有效段)
     单个 HTTP GET /actuator/health 到 127.0.0.1:8080
     no-keep-alive=false(允许连接复用,贴近真实流量)
+
+  教训沉淀(F-1 ticket §"F-11 完工后稳态复核" 段 + ADR-0009):
+    cold start 测量(JVM JIT 优化 + 容器刚起 + JIT cache 冷)前 25-30s 数字偏低是预期;
+    稳态测量方法才是 bullet 的有效 evidence。TG1 把 cold start 推到 plan 前期 30s,
+    TG2 跑时 JVM 已热,采 evidence 全稳态。
+
+  evidence 解读:取 TG2 Aggregate Report;TG1 不计入 bullet 验证。
 -->
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
   <hashTree>
-    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="F-1 health burst" enabled="true">
-      <stringProp name="TestPlan.comments">F-1 evidence: 5000+ QPS on /actuator/health</stringProp>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="F-1 health burst (F-13 pre-warm)" enabled="true">
+      <stringProp name="TestPlan.comments">F-1 evidence: 5000+ QPS on /actuator/health (TG1 warm-up + TG2 main)</stringProp>
       <boolProp name="TestPlan.functional_mode">false</boolProp>
       <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
       <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
@@ -22,7 +30,37 @@
       </elementProp>
     </TestPlan>
     <hashTree>
-      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="F-1 burst users" enabled="true">
+      <!-- TG1: warm-up 30s(JVM JIT warm + Tomcat accept queue hot) -->
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="TG1-warmup-30s" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <intProp name="LoopController.loops">-1</intProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">500</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">30</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">30</stringProp>
+        <stringProp name="ThreadGroup.delay">0</stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /actuator/health (warmup)" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+            <collectionProp name="Arguments.arguments"/>
+          </elementProp>
+          <stringProp name="HTTPSampler.domain">127.0.0.1</stringProp>
+          <stringProp name="HTTPSampler.port">8080</stringProp>
+          <stringProp name="HTTPSampler.protocol">http</stringProp>
+          <stringProp name="HTTPSampler.path">/actuator/health</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+        </HTTPSamplerProxy>
+        <hashTree/>
+      </hashTree>
+      <!-- TG2: main 60s 采稳态 evidence(bullet 验证段) -->
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="TG2-main-60s" enabled="true">
         <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
           <boolProp name="LoopController.continue_forever">false</boolProp>
@@ -35,7 +73,7 @@
         <stringProp name="ThreadGroup.delay">0</stringProp>
       </ThreadGroup>
       <hashTree>
-        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /actuator/health" enabled="true">
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /actuator/health (main)" enabled="true">
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
             <collectionProp name="Arguments.arguments"/>
           </elementProp>

@@ -242,8 +242,10 @@ F-1(无依赖)  →  F-2 / F-3 / F-4(互相独立)
 | **0005** | F-1 evidence 用 JMeter（locust 在 Windows GIL 受限，5000+ QPS bullet 跨不过） | 已采纳 |
 | **0006** | F-6 Demo Readiness 范围(招实习 demo 化 hardening) | 已采纳 |
 | **0007** | F-7~F-12 多 ticket 路线图(限流/锁/可观测性/CI/灰度/简历包装) | 已采纳 |
+| **0008** | ~~F-1 QPS bullet 调整(已撤回,保留原 "5000+ QPS" bullet)~~ | **已废止** |
+| **0009** | F-13 Demo & Verification Hardening(3 项 polish:F-1 JMX pre-warm + F-11 flag default + init.ps1 stage 6 PASS-WARN) | 已采纳 |
 
-任何后续 ADR 直接追加,编号 `0006` 起;**ADR 只增不删**(§9)。
+任何后续 ADR 直接追加,编号 `0008` 起;**ADR 只增不删**(§9)。废止条目保留正文(§9),但 §17 表中加粗标"已废止"。
 
 ---
 

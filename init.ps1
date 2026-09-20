@@ -81,8 +81,37 @@ if (Test-Path $likeCtrl) {
     & $UvBin run locust -f locustfile_mix.py --headless --host=http://127.0.0.1:8080 `
         -u 50 -r 25 -t 30s --csv=evidence/f5-p99 2>&1 | Select-Object -Last 20
     $locustExit = $LASTEXITCODE
-    if ($locustExit -ne 0) {
-        Write-Host "[init.sh] WARN: locust 退出码非零($locustExit),但 acceptance 在独立 evidence 文件已固化,继续"
+
+    # F-13 demo hardening(ADR-0009):解析 failures.csv 区分 PASS / PASS-WARN / FAIL
+    # F-7 限流上线后 50 user burst 撞穿 user bucket 100/10s 会触发 429,这是设计行为
+    # (用户 1 个 spam 就能触发),不是 bug → PASS-WARN 路径退出 0
+    # 只有"非 429 错误占比 > 5%"才判 FAIL(exit 1)
+    $failCsv = "evidence/f5-p99_failures.csv"
+    if (Test-Path $failCsv) {
+        $fails = Import-Csv $failCsv -ErrorAction SilentlyContinue
+        if ($fails) {
+            $totalFails = ($fails | Measure-Object -Property Occurrences -Sum).Sum
+            $f429 = ($fails | Where-Object { $_.Error -like "*429*" } | Measure-Object -Property Occurrences -Sum).Sum
+            $fOther = $totalFails - $f429
+            $ratio429 = if ($totalFails -gt 0) { $f429 / $totalFails } else { 0 }
+            $ratioOther = if ($totalFails -gt 0) { $fOther / $totalFails } else { 0 }
+
+            if ($ratioOther -gt 0.05) {
+                Write-Host "[init.sh] FAIL: stage 6 非 429 错误占比 = $([math]::Round($ratioOther*100, 2))% > 5%(429 = $([math]::Round($ratio429*100, 2))%)"
+                exit 1
+            } elseif ($ratio429 -ge 0.5) {
+                Write-Host "[init.sh] PASS-WARN: stage 6 429 占比 = $([math]::Round($ratio429*100, 2))%(F-7 限流设计行为触发,exit 0)"
+            } else {
+                Write-Host "[init.sh] PASS: stage 6 failures < 50%(429 = $([math]::Round($ratio429*100, 2))%, other = $([math]::Round($ratioOther*100, 2))%)"
+            }
+        } else {
+            Write-Host "[init.sh] PASS: stage 6 无 failures"
+        }
+    } else {
+        Write-Host "[init.sh] WARN: $failCsv 不存在,跳过 PASS-WARN 判断(locust ExitCode=$locustExit)"
+        if ($locustExit -ne 0) {
+            Write-Host "[init.sh] WARN: locust 退出码非零,但 acceptance 在独立 evidence 文件已固化,继续"
+        }
     }
 } else {
     Write-Host "[init.sh] 跳过(LikeController 尚未实现,F-5 待开干)"
