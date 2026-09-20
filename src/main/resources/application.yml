@@ -128,3 +128,18 @@ logging:
     root: INFO
     com.meisijiya.campusfood: DEBUG
     org.springframework.security: INFO
+
+# F-11 Feature Flag 配置中心 — 启动期 Redis 无值时 yml default-flags 兜底
+# Redis hash key = "feature_flags";W2 admin POST 写入后 < 1ms 通过 Caffeine 失效生效
+# 设计取舍:default-flags 是最小可启动集合(给 demo + 单测),生产真正由 W2 admin 端点维护
+feature-flag:
+  enabled: true
+  default-flags:
+    recommend-v2:
+      mode: PERCENTAGE
+      percentage: 20
+    like-cache-bypass:
+      mode: WHITELIST_ONLY
+      whitelist: [1, 2, 3]
+    merchant-detail-new:
+      mode: ALL_OFF
