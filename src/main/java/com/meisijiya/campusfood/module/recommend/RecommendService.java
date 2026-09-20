@@ -19,9 +19,10 @@ import com.meisijiya.campusfood.common.TokenEstimator;
 import com.meisijiya.campusfood.config.MicrometerConfig;
 import com.meisijiya.campusfood.module.catalog.session.SessionContext;
 import com.meisijiya.campusfood.module.catalog.session.SessionService;
+import com.meisijiya.campusfood.module.featureflag.FeatureFlag;
 
 /**
- * 推荐业务服务(F-2 占位 + Skill 注入;F-3 接入 advisor 链)。
+ * 推荐业务服务(F-2 占位 + Skill 注入;F-3 接入 advisor 链;F-11 W3 feature flag 接入)。
  *
  * <p>流程:
  * <ol>
@@ -32,6 +33,13 @@ import com.meisijiya.campusfood.module.catalog.session.SessionService;
  *       (见 {@code RecommendChatClientConfig})</li>
  *   <li>从 {@code ChatResponse.metadata.usage} 读 token 统计</li>
  * </ol>
+ *
+ * <p><b>F-11 W3</b>:{@link #recommend(String)} 上 {@code @FeatureFlag("recommend-v2")} —
+ * 20% 灰度命中用户走"v2 路径"(本方法体返回时 log.info 打点;后续 ticket 接入 v2 实际模型);
+ * 其余用户走原路径不变。Aspect 不改返回类型 ——
+ * 它仅决定是否进入方法体(flag 关闭 → 返 null / flag 开启 → 走方法体)。v2 路径的可观测性靠
+ * {@code feature_flag_check_total{flag=recommend-v2, decision=true/false}} Counter 与
+ * {@code flag_hit_timer_seconds{flag=recommend-v2}} Timer 共同验证。
  *
  * @author meisijiya
  */
@@ -78,8 +86,18 @@ public class RecommendService {
 
     /**
      * 对当前 sid 的会话跑一次推荐。返回经 advisor 链(反思重试 + 规则降级)处理后的内容 + token 统计。
+     *
+     * <p><b>F-11 W3</b>:本方法被 {@link com.meisijiya.campusfood.module.featureflag.FeatureFlagAspect}
+     * 拦截;flag {@code recommend-v2} 开启(20% 灰度命中)时才进入方法体,关闭(80%)时 Aspect 返 null。
+     * 命中分支走本方法体时多打一行 {@code log.info("recommend-v2 path taken for studentId={}", sid)},
+     * 方便日志侧直接 grep 验证 v2 流量占比。详见
+     * {@code docs/observability/demo-scenarios.md § Demo 1}。
      */
+    @FeatureFlag(value = "recommend-v2", defaultOn = false)
     public RecommendationResult recommend(String sid) {
+        // F-11 W3:flag 开启命中分支 log 打点(便于日志侧反推 v2 流量占比)
+        log.info("recommend-v2 path taken for studentId={}", sid);
+
         SessionContext ctx = sessionService.readContext(sid);
         String template = RECOMMEND_TEMPLATE.formatted(ctx.stage().name());
         String fullPrompt = skillRegistry.substitute(template, ctx);

@@ -1,7 +1,9 @@
 package com.meisijiya.campusfood.module.catalog;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
+import com.meisijiya.campusfood.module.featureflag.FeatureFlag;
 import com.meisijiya.campusfood.module.preheat.RedisShardedWriter;
 import com.meisijiya.campusfood.module.preheat.assembler.Cuisine;
 import com.meisijiya.campusfood.module.preheat.assembler.MerchantCatalog;
@@ -329,5 +332,58 @@ public class MerchantQueryService {
                     key, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 详情 DTO(功能开关版,F-11 W3 demo)— flag {@code merchant-detail-new} 开启时,在基本商户字段上
+     * 追加 {@code openHours} 等增量字段。flag 关闭时只返基本字段。
+     *
+     * <p>返回 {@link Map}{@code <String, Object>} 而非改 {@link Merchant} 实体:
+     * <ul>
+     *   <li>保留原 {@link Merchant} 实体 schema(只读 + 不可改 — W3 plan §18.4);</li>
+     *   <li>不强制 controller / DTO 改造 — Map 在 Jackson 序列化为 JSON 时与 {@code Merchant} 同名键对齐;</li>
+     *   <li>增量字段(如 {@code openHours})按需 put,后续 ticket 可继续扩展。</li>
+     * </ul>
+     *
+     * <h2>flag 行为</h2>
+     * <ul>
+     *   <li>flag 关闭:返 {@code {id, zoneId, cuisineId, name, tags, heatScore, found}}</li>
+     *   <li>flag 开启:返基本字段 + {@code openHours="09:00-22:00"} + {@code featureFlag="merchant-detail-new:ON"}</li>
+     * </ul>
+     *
+     * <p><b>F-11 W3</b>:本方法被 {@link FeatureFlagAspect} 拦截;flag 开启命中分支时,Aspect
+     * 在 jp.proceed() 返 Map 后追加 {@code openHours} + {@code featureFlag} 字段。
+     * flag 关闭分支返 Map(无新增字段),与原 {@code Merchant} 字段集一致。
+     *
+     * @param merchantId 商户主键
+     * @return Map 形式商户详情;flag 关闭时 key 集 = Merchant 字段 + {@code found};flag 开启时 + {@code openHours}
+     */
+    @FeatureFlag(value = "merchant-detail-new", defaultOn = false)
+    public Map<String, Object> findDetailById(String merchantId) {
+        // Aspect 拦截前 studentId 解析一定返 null(此方法无 sid 参数)— flag 仅依赖 merchantId 本身 +
+        // 全局 ALL_ON / ALL_OFF 决策。这与 yml default-flags 配置(merchant-detail-new: ALL_OFF)一致。
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (merchantId == null || merchantId.isBlank()) {
+            result.put("found", false);
+            result.put("id", merchantId);
+            return result;
+        }
+        Optional<Merchant> opt = findById(merchantId);
+        if (opt.isEmpty()) {
+            result.put("found", false);
+            result.put("id", merchantId);
+            return result;
+        }
+        Merchant m = opt.get();
+        // 基本字段(对齐 Merchant 实体)
+        result.put("id", m.getId());
+        result.put("zoneId", m.getZoneId());
+        result.put("cuisineId", m.getCuisineId());
+        result.put("name", m.getName());
+        result.put("tags", m.getTags());
+        result.put("heatScore", m.getHeatScore());
+        result.put("found", true);
+        // Aspect 在 flag 开启时会在此 Map 上再追加 openHours + featureFlag 两个 key
+        return result;
     }
 }

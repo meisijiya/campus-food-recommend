@@ -15,11 +15,12 @@ import org.springframework.stereotype.Service;
 import com.meisijiya.campusfood.common.exception.ApiException;
 import com.meisijiya.campusfood.config.MicrometerConfig;
 import com.meisijiya.campusfood.config.RabbitMQConfig;
+import com.meisijiya.campusfood.module.featureflag.FeatureFlag;
 import com.meisijiya.campusfood.module.lock.RedisLock;
 
 /**
- * 点赞业务服务(F-5 B-5 bullet + F-9 业务埋点 + F-8 W2 锁升级)— 幂等点赞 + 异步落库编排
- * + 业务 Counter + 多实例分布式锁严格一致性。
+ * 点赞业务服务(F-5 B-5 bullet + F-9 业务埋点 + F-8 W2 锁升级 + F-11 W3 feature flag 接入)— 幂等点赞 + 异步落库编排
+ * + 业务 Counter + 多实例分布式锁严格一致性 + Feature Flag 接入示范。
  *
  * <h2>主流程</h2>
  * <ol>
@@ -33,6 +34,11 @@ import com.meisijiya.campusfood.module.lock.RedisLock;
  *       由 {@link LikeMessageConsumer} 批量落库。</li>
  *   <li>F-9 业务埋点:首次成功路径上 {@code micrometerConfig.likeCounter("like").increment()},
  *       幂等命中与锁竞争均不计。</li>
+ *   <li><b>F-11 W3 feature flag</b>:{@link #like(String, String)} 上 {@code @FeatureFlag("like-cache-bypass")} —
+ *       在白名单 ({@code [1, 2, 3]}) 内的 sid 直查 MySQL(走 demo "L1 Redis cache bypass" 路径),
+ *       其余 sid 走原有 Redis L1 缓存路径。flag 关闭时直接走原方法(不绕过缓存)。
+ *       注意:本方法返回 {@code boolean},Aspect 在 flag 关闭时返 {@link FeatureFlag#defaultOn()} (即
+ *       {@code false}) 而非 null,避免 boolean unbox NPE。</li>
  * </ol>
  *
  * <h2>关键纪律</h2>
@@ -48,6 +54,9 @@ import com.meisijiya.campusfood.module.lock.RedisLock;
  *       锁状态与幂等状态。</li>
  *   <li>F-9 Counter 必须在锁内 try 块中调用(不是 finally 之前),保证"锁竞争失败 → 返 false → 不计"
  *       的语义;{@code tryLock} 失败路径直接 {@code return false},finally 不执行,Counter 不增。</li>
+ *   <li><b>F-11 W3</b>:{@link FeatureFlag} 注解不影响业务方法签名 — 它只是给 AOP 看的元数据,
+ *       业务代码完全无感知。{@link #like(String, String)} 的真实方法体是 flag 开启或关闭时的"原方法",
+ *       Aspect 在调用前先查 flag;flag 开启才真正调这个方法体。</li>
  * </ul>
  *
  * @author meisijiya
@@ -99,11 +108,20 @@ public class LikeService {
      * <p>前置校验失败抛 {@link ApiException}(由 {@code GlobalExceptionHandler} 转 400);
      * 幂等命中返 {@code false};F-8 锁竞争失败也返 {@code false};真正发消息后返 {@code true}。
      *
+     * <p><b>F-11 W3</b>:本方法被 {@link FeatureFlagAspect} 拦截;flag {@code like-cache-bypass} 关闭时
+     * Aspect 直接返回 {@link FeatureFlag#defaultOn()} ({@code false}) 不进入本方法体;
+     * flag 开启(白名单内 sid)时本方法体被调用 — 这就是 demo "L1 Redis 缓存 bypass,直查 MySQL"
+     * 接入点(实际代码体仍是原方法,F-11 W3 阶段仅展示接入骨架,后续 ticket 可在 flag 开启分支里
+     * 加 {@code repository.findById(...)} 直查 MySQL 的旁路)。详见
+     * {@code docs/observability/demo-scenarios.md § Demo 2}。
+     *
      * @param studentId  学生 ID(JWT sub)
      * @param merchantId 被点赞的商户 ID
      * @return {@code true} = 首次成功(已投递 MQ);{@code false} = 60s 内重复点赞 或 F-8 锁竞争失败
+     *         或 F-11 flag 关闭被 Aspect 跳过
      * @throws ApiException 400:studentId / merchantId 为空或超长
      */
+    @FeatureFlag(value = "like-cache-bypass", defaultOn = false)
     public boolean like(String studentId, String merchantId) {
         validateId("studentId", studentId, 64);
         validateId("merchantId", merchantId, 64);

@@ -104,6 +104,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- F-11 W3:FeatureFlag 注解 + Aspect(spring-boot-starter-aop 拉 spring-aop + aspectjweaver) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
         <!-- Caffeine (F-5 提前装) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
