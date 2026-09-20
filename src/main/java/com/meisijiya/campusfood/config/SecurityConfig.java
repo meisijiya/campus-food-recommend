@@ -75,7 +75,9 @@ public class SecurityConfig {
                                 "/actuator/prometheus",
                                 // F-4 review fix:/actuator/info 不再默认 permitAll(防止未来 info.* 配置
                                 // 引入 git/build/env 泄露);要走鉴权
-                                "/admin/preheat/**"
+                                "/admin/preheat/**",
+                                // F-11 W2:Feature Flag 公开 check 接口(招实习 demo 用)无需鉴权
+                                "/api/feature-flag/**"
                         ).permitAll()
                         .requestMatchers("/actuator/info").authenticated()
                         .requestMatchers("/admin/preheat/**").access((authCtx, request) -> {
@@ -87,6 +89,11 @@ public class SecurityConfig {
                                     .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
                             return new org.springframework.security.authorization.AuthorizationDecision(isAdmin);
                         })
+                        // F-11 W2:admin 改 Feature Flag 配置中心 — 必须 ADMIN 角色。
+                        // /api/feature-flag/** 已在 permitAll 公开;admin POST/GET 走 ROLE_ADMIN 路径。
+                        // FeatureFlagAdminController 还叠了 @PreAuthorize("hasRole('ADMIN')") 作 method-level 兜底,
+                        // 防 SecurityConfig 此处被未来 review 误删。
+                        .requestMatchers("/admin/feature-flag/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(authenticationEntryPoint))
