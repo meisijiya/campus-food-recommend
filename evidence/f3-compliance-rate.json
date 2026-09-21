@@ -1,0 +1,57 @@
+{
+  "ticket" : "F-3-structured-output",
+  "profile" : "bench",
+  "sample_count" : 100,
+  "first_attempt_valid_count" : 0,
+  "first_attempt_compliance_rate" : 0.0,
+  "final_valid_count" : 100,
+  "final_compliance_rate" : 1.0,
+  "first_attempt_target" : 0.88,
+  "first_attempt_target_met" : false,
+  "samples_first_5" : [ {
+    "index" : 0,
+    "stage" : "INIT",
+    "zone" : "Z-west",
+    "status" : 200,
+    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "final_valid" : true,
+    "first_attempt_valid" : false,
+    "is_fallback" : true
+  }, {
+    "index" : 1,
+    "stage" : "ZONE",
+    "zone" : "Z-east",
+    "status" : 200,
+    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "final_valid" : true,
+    "first_attempt_valid" : false,
+    "is_fallback" : true
+  }, {
+    "index" : 2,
+    "stage" : "CUISINE",
+    "zone" : "Z-south",
+    "status" : 200,
+    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "final_valid" : true,
+    "first_attempt_valid" : false,
+    "is_fallback" : true
+  }, {
+    "index" : 3,
+    "stage" : "MERCHANT",
+    "zone" : "Z-library",
+    "status" : 200,
+    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "final_valid" : true,
+    "first_attempt_valid" : false,
+    "is_fallback" : true
+  }, {
+    "index" : 4,
+    "stage" : "INIT",
+    "zone" : "Z-north",
+    "status" : 200,
+    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "final_valid" : true,
+    "first_attempt_valid" : false,
+    "is_fallback" : true
+  } ]
+}

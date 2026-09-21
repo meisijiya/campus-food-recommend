@@ -7,6 +7,7 @@ spring:
     dashscope:
       enabled: true
       api-key: ${DASHSCOPE_API_KEY:}
+      base-url: ${DASHSCOPE_BASE_URL:}
       chat:
         options:
           model: qwen-plus
