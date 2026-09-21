@@ -1,8 +1,12 @@
 # F-11 Feature Flag · Default Behavior & Startup Scenarios
 
-> **Status:** F-13 polish-B 产出物(对应 `FeatureFlagRedisConfig.loadFromRedis` 启动期 fallback 路径)
+> **Status:** F-13 polish-B + F-11 polish 后 prod 实战验证产出物(对应 `FeatureFlagRedisConfig.loadFromRedis` 启动期 fallback 路径)
 > **适用场景:** 招实习面试 / 故障排查 — 4 种启动场景下 FeatureFlag 的兜底行为 + 运行时观察方法
 > **前置依赖:** F-11 W1(`FeatureFlagRedisConfig.loadFromRedis` + `DefaultFeatureFlagService.setConfig` 同步写 Redis hash + 失效 Caffeine)
+> **配套产出:**
+> - `src/test/.../FeatureFlagIT.java` 4 个新测试(case A/B/C/D)— in-process 验证
+> - `evidence/f11-startup-scenarios.md` — 真实环境端到端 curl 验证(2026-09-21 跑出,4 场景 PASS)
+> - `scripts/f11-startup-verify.ps1` — 一键复跑 4 场景(本机 + docker daemon 在线即可)
 > **不破坏现有调用栈:** 仅补充 prod 启动期行为契约,业务方法签名不变
 
 ---
@@ -121,3 +125,4 @@ INFO ... DefaultFeatureFlagService initialized: total flags=3, enabled=true
 3. **灰度比例不准?** → Prometheus `feature_flag_check_total{flag,decision}` 反推 `true / (true+false)` 应 ≈ yml / Redis 配置的 PERCENTAGE
 4. **admin POST 后没生效?** → 确认 `setConfig` HTTP 200 + 立即再调 `check` 端点(不走 Caffeine 缓存路径)
 5. **改动 yml 没生效?** → yml 仅启动期生效,运行时改 yml **必须重启应用**;运维期改 flag 走 admin POST 写 Redis hash(立即生效)
+6. **复跑 4 启动场景验证?** → `pwsh -File scripts/f11-startup-verify.ps1`(需 docker daemon + cfr 容器),EXIT=0 即 4/4 验证通过;evidence 落到 `evidence/f11-startup-scenarios.md` 留作下次对照
