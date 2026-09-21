@@ -101,6 +101,45 @@ if (Test-Path $likeCtrl) {
                 exit 1
             } elseif ($ratio429 -ge 0.5) {
                 Write-Host "[init.sh] PASS-WARN: stage 6 429 占比 = $([math]::Round($ratio429*100, 2))%(F-7 限流设计行为触发,exit 0)"
+                # F-13 polish-C:把 PASS-WARN 关键 metric 落到 evidence/f5-p99-metrics.csv,便于复盘/对比
+                # 13 列固定顺序,每次 stage 6 PASS-WARN 触发时覆盖写,不走 append
+                $statsCsv = "evidence/f5-p99_stats.csv"
+                $metricsCsv = "evidence/f5-p99-metrics.csv"
+                if (Test-Path $statsCsv) {
+                    $stats = Import-Csv $statsCsv -ErrorAction SilentlyContinue
+                    $agg = $stats | Where-Object { $_.Name -eq "Aggregated" } | Select-Object -First 1
+                    if ($agg) {
+                        $totalReq = [int]$agg.'Request Count'
+                        $rpsVal = [double]$agg.'Requests/s'
+                        $p50 = [double]$agg.'Median Response Time'
+                        $p95 = [double]$agg.'95%'
+                        $p99 = [double]$agg.'99%'
+                        $timestamp = (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz')
+                        $ratio429Pct = [math]::Round($ratio429 * 100, 2)
+                        $ratioOtherPct = [math]::Round($ratioOther * 100, 2)
+                        $row = [PSCustomObject]@{
+                            timestamp         = $timestamp
+                            ticket            = 'f5'
+                            total_requests    = $totalReq
+                            rps               = $rpsVal
+                            p50_ms            = $p50
+                            p95_ms            = $p95
+                            p99_ms            = $p99
+                            f429_count        = $f429
+                            f429_ratio_pct    = $ratio429Pct
+                            fother_count      = $fOther
+                            fother_ratio_pct  = $ratioOtherPct
+                            status            = 'PASS-WARN'
+                            note              = 'F-13 polish-C: F-7 rate-limit design behavior, 429 burst captured for replay'
+                        }
+                        $row | Export-Csv -Path $metricsCsv -NoTypeInformation -Encoding UTF8
+                        Write-Host "[init.sh] metrics dumped: $metricsCsv"
+                    } else {
+                        Write-Host "[init.sh] WARN: $statsCsv 缺 Aggregated 行,metrics CSV 跳过"
+                    }
+                } else {
+                    Write-Host "[init.sh] WARN: $statsCsv 不存在,metrics CSV 跳过"
+                }
             } else {
                 Write-Host "[init.sh] PASS: stage 6 failures < 50%(429 = $([math]::Round($ratio429*100, 2))%, other = $([math]::Round($ratioOther*100, 2))%)"
             }
