@@ -77,7 +77,25 @@ public class RuleBasedFallbackAdvisor implements BaseAdvisor {
 
     @Override
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
-        ChatClientResponse response = chain.nextCall(request);
+        // F-14 fix:Spring AI 1.1.x 的 CallAdvisorChain 接口没有 hasNext(),且 Spring AI
+        // 1.1.2 DefaultAroundAdvisorChain.reOrder() 在 RBFA.order == ChatModelCallAdvisor.order
+        // (都是 LOWEST_PRECEDENCE = Integer.MAX_VALUE) 的 stable sort 下把 CM 排在 RBFA 前,
+        // 实际执行顺序是 [RRA → CM → RBFA]。ReflectiveRetryAdvisor 的 retry 路径会把 RBFA
+        // 触发,但此时 deque 已被 RRA first call (pop CM) + retry pop RBFA 耗尽,
+        // RBFA 调 chain.nextCall() 会抛 IllegalStateException("No CallAdvisors available to execute")。
+        // 这里捕获该异常后直接产 fallback JSON,跳过下游调用 ——
+        // RBFA 是 chain 末位 + 兜底角色,逻辑上不需要也不应该继续 chain。
+        ChatClientResponse response;
+        try {
+            response = chain.nextCall(request);
+        } catch (IllegalStateException e) {
+            if (e.getMessage() == null || !e.getMessage().contains("No CallAdvisors")) {
+                throw e;
+            }
+            log.warn("F-3 fallback advisor: inner chain empty (chain drained after RRA retry), "
+                    + "returning mock-catalog fallback JSON");
+            return buildFallbackChatClientResponse(request);
+        }
 
         // 只在第 2 次(重试)调用 + 响应仍不合规时接管
         boolean isRetryAttempt = isRetryAttempt(request);
@@ -90,11 +108,32 @@ public class RuleBasedFallbackAdvisor implements BaseAdvisor {
         }
 
         log.warn("F-3 反思重试仍不合规,触发规则降级 fallback");
-        String fallbackJson = buildFallbackJson();
-        ChatResponse replaced = replaceContent(response.chatResponse(), fallbackJson);
+        return buildFallbackReplacedResponse(response, request);
+    }
+
+    /**
+     * 在 chain 已耗尽(no downstream advisor)的极端情况下,直接构造 fallback
+     * ChatClientResponse ——
+     * 不保留任何上游 ChatModel 响应 metadata(因为没有),但保留当前 request 的 context。
+     */
+    private static ChatClientResponse buildFallbackChatClientResponse(ChatClientRequest request) {
+        ChatResponse replaced = replaceContent(null, buildFallbackJson());
         return ChatClientResponse.builder()
                 .chatResponse(replaced)
-                .context(response.context())
+                .context(request.context())
+                .build();
+    }
+
+    /**
+     * chain.nextCall 拿到上游响应后,把它替换成 schema 合规的 fallback JSON —
+     * 保留原 ChatResponse 的 metadata(usage / model 等),只换 AssistantMessage 内容。
+     */
+    private static ChatClientResponse buildFallbackReplacedResponse(ChatClientResponse original,
+                                                                    ChatClientRequest request) {
+        ChatResponse replaced = replaceContent(original.chatResponse(), buildFallbackJson());
+        return ChatClientResponse.builder()
+                .chatResponse(replaced)
+                .context(request.context())
                 .build();
     }
 
