@@ -110,7 +110,8 @@ class LikeServiceIT {
     @DisplayName("like_firstCall_幂等key写入Redis且消息投递like.db.write_且返回true")
     void like_firstCall_setsIdempotencyKey_andSendsMessage() {
         // given — 干净的初始状态;用唯一 merchantId 隔离跨用例串扰
-        String studentId = "demo-stu-1";
+        // studentId 必须在 like-cache-bypass 白名单 [1,2,3] 内(F-11 FeatureFlagAspect 短路返 false 会绕过 Redis SETNX)
+        String studentId = "1";
         String merchantId = "M-FRESH-" + System.nanoTime();
         String idemKey = LikeService.IDEM_KEY_PREFIX + studentId + ":" + merchantId;
 
@@ -154,7 +155,8 @@ class LikeServiceIT {
     @DisplayName("like_60sIdempotent_第二次调用返false_队列无新消息")
     void like_60sIdempotent_secondCallReturnsFalse_noNewMessage() {
         // given — 唯一 student/merchant 隔离跨用例
-        String studentId = "demo-stu-2";
+        // studentId 在 like-cache-bypass 白名单 [1,2,3] 内,且与 like_firstCall 用例区分开(避免幂等 cache 串扰)
+        String studentId = "2";
         String merchantId = "M-IDEM-" + System.nanoTime();
         String idemKey = LikeService.IDEM_KEY_PREFIX + studentId + ":" + merchantId;
 

@@ -138,7 +138,8 @@ class ObservabilityIT {
     void prometheusEndpoint_containsAll4BusinessMetrics() throws Exception {
         // given — 触发 4 个业务路径,让 Micrometer 注册对应指标 + 至少一次自增
         // 1) LikeService.like() — 触发 like_count_total Counter
-        boolean liked = likeService.like("demo-stu-obs", "M-OBS-001");
+        //    studentId="3" 命中 like-cache-bypass 白名单 [1,2,3] (F-11 FeatureFlagAspect 否则短路返 false)
+        boolean liked = likeService.like("3", "M-OBS-001");
         assertThat(liked).as("first like() must succeed (Redis SETNX true)").isTrue();
 
         // 2) SessionService.init() + readContext() — 触发 session_stage_distribution Counter (INIT stage +1)
