@@ -5,7 +5,7 @@
 > **限流豁免**: `RateLimitFilter` 同时跳过 `/api/auth/**`、`/actuator/**`、`/error`(防登录锁死 + k8s 探针误杀 + Spring 内部错误转发)
 > **响应包装**: 全部响应统一包成 `ApiResponse<T>`,HTTP 状态码由异常处理决定(`GlobalExceptionHandler` 映射)
 > **错误码表**: 6 个公开码 + 2 个 F-11 内部保留常量(脚注说明)
-> **最近一次定稿**: 2026-09-22(F-17,commit 见 git log `[F-17]`)
+> **最近一次定稿**: 2026-09-22 字段对齐 hotfix(F-17 基础上逐项核对 Controller / Service / Entity 源码,修齐 9 处不一致)
 > **覆盖范围**: F-1 / F-2 / F-3 / F-4 / F-5 / F-6 / F-7 / F-8 / F-9 / F-11(共 10 个 ticket 后落地的接口)
 
 ---
@@ -75,14 +75,15 @@
   "data": {
     "accessToken": "eyJhbGc...",
     "refreshToken": "eyJhbGc...",
-    "expiresIn": 7200,
-    "tokenType": "Bearer"
+    "expiresIn": 7200
   }
 }
 ```
 
+> `AuthResponse` record 只有这 3 个字段(`AuthService.java:75`):**没有 `tokenType` 字段**——前端调用时按 OAuth2 Bearer 约定固定在 `Authorization: Bearer <accessToken>` 头里,与响应体无关。
+
 **失败**
-- `40100`(错误密码):`{ "code": 40100, "message": "Bad credentials", "data": null }`
+- `40100`(错误密码):`{ "code": 40100, "message": "用户名或密码错误", "data": null }`
 - `40000`(缺 username / password / 类型错误)
 
 **预设账号**(内存 `UserDetailsServiceImpl`):
@@ -115,27 +116,30 @@
   "code": 0,
   "data": {
     "stage": "INIT",
-    "zone": null,
-    "cuisine": null,
-    "merchant": null
+    "zoneId": null,
+    "cuisineId": null,
+    "merchantId": null
   }
 }
 ```
 
+> **请求体通用**:`{ "value": "<id>" }` —— DTO 是 `record SlotRequest(@NotBlank String value)`,`value` 是字符串(对应 `Merchant.id` / `zoneId` / `cuisineId` 都是 String,非 Long)。**所有 ID 走 `value` 字段**,不叫 `zoneId` / `cuisineId` / `merchantId`。
+> **响应字段**:`SessionContext` record 字段是 `stage / zoneId / cuisineId / merchantId`(全名带 `Id` 后缀);Redis 里也是字符串形式(`session:<sid>:zone = "Z-3"`)。
+
 ### 2.2 `POST /api/session/zone`
 
-**请求**:`{ "zoneId": 3 }`
-**响应 200**:`{ "stage": "ZONE", "zone": 3, ... }`
+**请求**:`{ "value": "Z-3" }`
+**响应 200**:`{ "stage": "ZONE", "zoneId": "Z-3", "cuisineId": null, "merchantId": null }`
 **前置**:必须在 `INIT` 阶段,否则 `40000 非法跳转`
 
 ### 2.3 `POST /api/session/cuisine`
 
-**请求**:`{ "cuisineId": 12 }`
+**请求**:`{ "value": "C-12" }`
 **前置**:必须在 `ZONE` 阶段,否则 `40000`
 
 ### 2.4 `POST /api/session/merchant`
 
-**请求**:`{ "merchantId": 42 }`
+**请求**:`{ "value": "M-42" }`
 **前置**:必须在 `CUISINE` 阶段,否则 `40000`
 
 > **底层**: 状态完全在 Redis(`session:<sid>:stage` / `:zone` / `:cuisine` / `:merchant`),空闲 30 分钟自动回 `INIT`(`EXPIRE 1800`,写入重置)。
@@ -147,6 +151,7 @@
 ### 3.1 `POST /api/recommend`
 
 **鉴权**:Bearer(`@PreAuthorize("isAuthenticated()")`)
+**请求**:空(后端从 JWT `sub` 取 sid)
 
 **响应 200**(dev/test/it profile 走 `MockChatModel`):
 
@@ -154,14 +159,24 @@
 {
   "code": 0,
   "data": {
-    "recommendations": [
-      { "merchantId": 7, "name": "清真食堂", "reason": "清淡口味,无辣菜品" }
-    ],
-    "tokensUsed": 184,
-    "modelVersion": "mock-v1"
+    "content": "{\"merchantId\":[\"m-001\",\"m-002\"],\"reason\":\"...\",\"confidence\":0.85}",
+    "stage": "INIT",
+    "promptTokens": 184,
+    "completionTokens": 96
   }
 }
 ```
+
+**字段说明**
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `content` | string | **AI 输出的原始 JSON 字符串**,严格符合 `RecommendationSchema`。前端需要 `JSON.parse(content)` 拿 `merchantId[] / reason / confidence`。 |
+| `stage` | string(INIT/ZONE/CUISINE/MERCHANT) | 当前会话阶段 |
+| `promptTokens` | int/null | Spring AI prompt token 数(Mock profile 用 tiktoken 启发式估算) |
+| `completionTokens` | int/null | 同上 |
+
+> **没有 `recommendations[]` / `modelVersion` 字段**:`RecommendationResult` record 只有这 4 个字段;AI 返回的 merchant 信息在 `content` 里(已 schema 合规)。
 
 **降级路径**:
 
@@ -191,32 +206,35 @@ ApiResponse.ok(schema 合规 JSON)
 ### 4.1 `POST /api/like/{merchantId}`
 
 **鉴权**:Bearer
+**路径变量 `merchantId`**:字符串(非 Long),非空,长度 ≤ 64
 
 **幂等语义**: 同一 `(studentId, merchantId)` 60 秒内重复 POST 只生效一次。
 
 **响应 200(首次)**
 
 ```json
-{ "code": 0, "data": { "liked": true, "merchantId": 7, "at": "2026-09-22T01:00:00Z" } }
+{ "code": 0, "message": "ok", "data": { "liked": true } }
 ```
 
 **响应 200(60s 内重复)**
 
 ```json
-{ "code": 0, "data": { "liked": false, "merchantId": 7, "message": "已点赞" } }
+{ "code": 0, "message": "already liked", "data": { "liked": false } }
 ```
+
+> 注意:重复点赞 HTTP 也是 200,`code=0` ——业务层面视为成功但幂等拦截。前端**不需要弹错**,根据 `liked` 决定 UI 状态(已点赞 → 高亮,未点赞 → 普通)。
 
 **底层**
 
 ```
 Redis SET like:idem:<sid>:<mid> 1 NX EX 60
   ├─ 成功 → rabbitTemplate.send("like.db.write", LikeMessage)
-  └─ 失败 → 返 "liked=false, message=已点赞"(不投递 MQ)
+  └─ 失败 → 返 "liked=false, message=already liked"(不投递 MQ)
 ```
 
 落库失败消息进 DLQ `like.db.write.dlq`(人工补偿)。
 
-**失败**:`40100` / `40000`(merchantId 非 Long)/ `50000`
+**失败**:`40100` / `40000`(merchantId 或 studentId 为空 / 长度 > 64 / 含非法字符,白名单 `[A-Za-z0-9_.-]+`,违例 message: `"<field> contains illegal chars (allowed: [A-Za-z0-9_.-])"`,校验在 `LikeService.validateId`——`studentId` 来自 JWT sub,实际触发概率极低,由 `JwtAuthenticationFilter` 优先兜底为 401)/ `50000`
 
 ---
 
@@ -225,41 +243,68 @@ Redis SET like:idem:<sid>:<mid> 1 NX EX 60
 ### 5.1 `GET /api/merchant/{id}`
 
 **鉴权**:Bearer
+**路径变量 `id`**:字符串(非 Long),非空,长度 ≤ 64
+
 **响应 200**
 
 ```json
 {
   "code": 0,
   "data": {
-    "id": 7,
+    "id": "m-001",
     "name": "清真食堂",
-    "zoneId": 3,
-    "cuisineId": 12,
-    "heat": 87,
-    "openHours": "06:30-21:00",
-    "hitTier": "L0"
+    "zoneId": "Z-3",
+    "cuisineId": "C-12",
+    "tags": "清真,快餐,面食",
+    "heatScore": 87.5
   }
 }
 ```
 
-三级降级读取:`Caffeine L0 → Redis L1 → MySQL L2`,`hitTier ∈ {L0, L1, L2, miss}` 反映实际命中层(调试用)。
+**字段说明**
 
-**失败**:`40100` / `40400`(`MerchantQueryService` 抛 `ApiException(NOT_FOUND)`)/ `42900` / `50000`
+| 字段 | 类型 | 备注 |
+|---|---|---|
+| `id` / `zoneId` / `cuisineId` | string | 主键与外键,业务方提供,非自增 |
+| `name` | string | 展示名 |
+| `tags` | string/null | 逗号分隔的标签字符串 |
+| `heatScore` | double/null | 凌晨预热算出的热度分 |
 
-### 5.2 `GET /api/merchant?zoneId={zoneId}`
+三级降级读取:`Caffeine L0 → Redis L1 → MySQL L2`,缓存命中是**透明过程** ——响应字段不包含 `hitTier` / `openHours`(这是 `findById` 标准输出,前端无需关心命中层)。
 
-按商圈批量获取(同样走 `L0→L1→L2`)。
-**响应**:`{ "code": 0, "data": [ { merchant obj }, ... ] }`
+> 另有 `MerchantQueryService.findDetailById()`(`@FeatureFlag("merchant-detail-new")`)会在 `merchant-detail-new` flag 开启时追加 `openHours` + `featureFlag` 字段,默认走 `MerchantController.getById` 不走 detail 路径。
+
+**失败**:`40100` / `40400`(`MerchantQueryService` 抛 `ApiException(NOT_FOUND)`,message: `"merchant not found: <id>"`)/ `42900` / `50000`
+
+### 5.2 `GET /api/merchant?zoneId=Z-3`
+
+按商圈批量获取(同样走 `L0→L1→L2`)。`zoneId` 是字符串(对应 `Merchant.zoneId` 是 String)。
+
+**响应**
+
+```json
+{
+  "code": 0,
+  "data": [
+    { "id": "m-001", "name": "清真食堂", ... },
+    { "id": "m-002", "name": "黄焖鸡米饭", ... }
+  ]
+}
+```
+
+**失败**:`40000`(`zoneId` 超长) / `40100` / `42900`。**zoneId 不存在时返空列表**(`data: []`),不报 404。
 
 ---
 
-## 6. 预热管理(`/admin/preheat/**` — 需 ADMIN + 过限流)
+## 6. 预热管理(`/admin/preheat/**`)
+
+> ⚠️ **只在 dev profile 注册**:`PreheatAdminController` 类标了 `@Profile("dev")`。非 dev profile(prod / bench / smoke / test / it)下该 bean 不存在,端点直接 404。
+> 生产用凌晨定时任务 `@Scheduled(cron="0 0 3 * * ?")` 由 `HeatJobPreheater.run()` 自动跑(F-8 多实例防重走 `RedisLock` 同一把 `LOCK_KEY`)。
 
 ### 6.1 `POST /admin/preheat/trigger`
 
-**鉴权**:
-- `dev` / `test` / `it` profile:免鉴权(`SecurityConfig` 临时放行,本地调试用)
-- 其他 profile:需 `ROLE_ADMIN`(`@PreAuthorize`)
+**Profile**:`dev` only(Controller `@Profile("dev")`)
+**鉴权**:`dev` profile 下免鉴权(`SecurityConfig` permitAll + controller 仅 dev 注册);若非 dev profile 手动启用,`SecurityConfig.access()` 要求 `ROLE_ADMIN`。
 
 **请求**:空 body
 **响应 200**
@@ -268,6 +313,7 @@ Redis SET like:idem:<sid>:<mid> 1 NX EX 60
 {
   "code": 0,
   "data": {
+    "timestamp": "2026-09-22T01:00:00Z",
     "merchantCount": 103,
     "zoneCount": 12,
     "hotCount": 10,
@@ -276,9 +322,19 @@ Redis SET like:idem:<sid>:<mid> 1 NX EX 60
 }
 ```
 
-底层:`MerchantHeatCalculator` 从 MySQL 订单 / 点赞表算热度,`CatalogHierarchyAssembler` 装 zone→cuisine→merchant 层级 JSON,`RedisShardedWriter` 按 zone 分片 SETEX。生产环境默认 `@Scheduled(cron="0 0 3 * * ?")` 自动凌晨跑。
+**字段说明**
 
-**失败**:`40300`(非 ADMIN)/ `40100` / `50000`(DB / Redis 异常)
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `timestamp` | string(ISO-8601 UTC) | 预热完成时刻 |
+| `merchantCount` | int | 本次参与计算的商户数 |
+| `zoneCount` | int | 写入的 Redis 分片数 |
+| `hotCount` | int | 写入 `catalog:hot:merchants` 的 Top N 数 |
+| `elapsedMs` | long | 整次预热耗时(毫秒) |
+
+底层:`MerchantHeatCalculator` 从 MySQL 订单 / 点赞表算热度,`CatalogHierarchyAssembler` 装 zone→cuisine→merchant 层级 JSON,`RedisShardedWriter` 按 zone 分片 SETEX。
+
+**失败**:非 dev profile → 404;非 ADMIN 在 prod → `40300` / `40100`;Redis / DB 异常 → `50000`
 
 ---
 
