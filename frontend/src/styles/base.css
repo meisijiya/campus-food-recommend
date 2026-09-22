@@ -1,0 +1,74 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-bg);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: var(--leading-normal);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* 焦点环(WCAG AA)== */
+  :focus-visible {
+    outline: 2px solid var(--color-primary-500);
+    outline-offset: 2px;
+    border-radius: var(--radius-md);
+  }
+
+  /* 标题层级不跳级 === */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: var(--tracking-tight);
+    color: var(--color-text-primary);
+  }
+}
+
+@layer components {
+  /* 视觉 token demo 公共类(占位 view 使用)== */
+  .token-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .token-swatch {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 3rem;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    min-width: 5rem;
+  }
+
+  .placeholder-banner {
+    background: var(--color-secondary-50);
+    color: var(--color-secondary-700);
+    border: 1px solid var(--color-secondary-500);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+  }
+}

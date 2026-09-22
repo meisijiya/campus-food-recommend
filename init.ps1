@@ -1,13 +1,14 @@
 # init.ps1 — 验证门禁(Windows PowerShell 版本)
 #
-# 7 阶段验证:
-#   1/7 编译 + 打 jar
-#   2/7 单元 + 集成测试(Mock profile)
-#   3/7 docker-compose 文件合法性
-#   4/7 dev profile 启动后 /actuator/health 检查
-#   5/7 JMeter F-1 5000+ QPS 压测(ADR-0005)
-#   6/7 locust F-5 P99<50ms 压测(待 F-5 完成才生效)
-#   7/7 frontend-design 文档校验(ADR-0011)
+# 8 阶段验证:
+#   1/8 编译 + 打 jar
+#   2/8 单元 + 集成测试(Mock profile)
+#   3/8 docker-compose 文件合法性
+#   4/8 dev profile 启动后 /actuator/health 检查
+#   5/8 JMeter F-1 5000+ QPS 压测(ADR-0005)
+#   6/8 locust F-5 P99<50ms 压测(待 F-5 完成才生效)
+#   7/8 frontend-design 文档校验(ADR-0011)
+#   8/8 frontend 工程 build + tsc(ADR-0012,frontend/ 缺失时跳过)
 #
 # 入口:bash init.sh(委托到这里),或直接 powershell -ExecutionPolicy Bypass -File init.ps1
 # 退出码:0 = PASS,非 0 = 失败。
@@ -225,4 +226,38 @@ if ($stage7Fail) {
     exit 1
 }
 Write-Host "[init.sh] PASS: 阶段 7/7 frontend-design 校验通过"
-Write-Host "[init.sh] PASS:全部 7 阶段通过"
+
+# === 8/8 ===
+# ADR-0012:frontend 工程 build + tsc 校验。frontend/ 缺失时跳过(防早期 commit 失败)。
+Write-Host "[init.sh] 阶段 8/8: frontend 工程 build + tsc ..."
+$frontendDir = "frontend"
+if (-not (Test-Path $frontendDir)) {
+    Write-Host "[init.sh] SKIP: stage 8 frontend/ 不存在,跳过(本仓库 commit history 早期阶段,F-16.1 未落地)"
+} else {
+    $npmBin = if ($env:NPM_BIN) { $env:NPM_BIN } else { "npm.cmd" }
+
+    # tsc 类型检查
+    Write-Host "[init.sh] 8/8 step 1/2: vue-tsc --noEmit ..."
+    Push-Location $frontendDir
+    try {
+        & $npmBin run type-check 2>&1 | Select-Object -Last 10
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[init.sh] FAIL: vue-tsc 类型检查未通过"
+            Pop-Location
+            exit 1
+        }
+
+        # vite build(实际构建,验证整个链路)
+        Write-Host "[init.sh] 8/8 step 2/2: vite build ..."
+        & $npmBin run build 2>&1 | Select-Object -Last 15
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[init.sh] FAIL: vite build 未通过"
+            Pop-Location
+            exit 1
+        }
+    } finally {
+        Pop-Location
+    }
+    Write-Host "[init.sh] PASS: 阶段 8/8 frontend build + tsc 通过"
+}
+Write-Host "[init.sh] PASS:全部 8 阶段通过"

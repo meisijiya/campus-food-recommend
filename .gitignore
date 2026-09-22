@@ -68,3 +68,13 @@ evidence/**/*.log
 
 # --- harness-creator 本会话审计产物(下次会话不再相关) ---
 .far/
+
+# --- Frontend (Vite + Vue3, F-16.1+, 见 ADR-0012) ---
+# 工程源文件 tracked;依赖产物 / 构建产物 / dev cache 不 tracked
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+
+# 截图清单(招实习现场 + README,本地维护,不入仓)
+docs/design/frontend/screenshots/
