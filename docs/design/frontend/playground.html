@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campus Food Recommend · F-16.1 Playground</title>
+  <meta name="description" content="F-16.1 视觉 token 实时调节 playground。左侧 controls,中间 5 view 占位预览,底部 prompt 输出。可用于招实习现场 + 企业级 UI 评估。" />
+  <style>
+    /* ===== playground chrome(dark theme)===== */
+    :root {
+      --pg-bg: #1a1a1a;
+      --pg-fg: #e6e3dd;
+        --pg-muted: #8a8780;
+      --pg-border: #2c2a26;
+      --pg-accent: #4ade80;
+      --pg-mono: ui-monospace, "JetBrains Mono", "Fira Code", Consolas, monospace;
+      --pg-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--pg-sans);
+      background: var(--pg-bg);
+      color: var(--pg-fg);
+      height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--pg-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #15140f;
+    }
+    header h1 { font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+    header h1 .accent { color: #4ade80; }
+    header .meta { font-size: 11px; color: var(--pg-muted); font-family: var(--pg-mono); }
+
+    main {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      overflow: hidden;
+    }
+
+    .controls {
+      padding: 16px;
+      overflow-y: auto;
+      border-right: 1px solid var(--pg-border);
+      background: #15140f;
+    }
+    .controls section { margin-bottom: 20px; }
+    .controls h2 {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--pg-muted);
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--pg-border);
+    }
+
+    .ctl {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .ctl label {
+      color: var(--pg-fg);
+      flex: 1;
+      font-size: 12px;
+    }
+    .ctl input, .ctl select, .ctl button {
+      background: #232220;
+      color: var(--pg-fg);
+      border: 1px solid var(--pg-border);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-family: var(--pg-mono);
+    }
+    .ctl input[type=color] {
+      padding: 2px;
+      width: 36px;
+      height: 24px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .ctl input[type=range] {
+      flex: 1.4;
+      min-width: 0;
+      accent-color: #4ade80;
+    }
+    .ctl .val {
+      font-family: var(--pg-mono);
+      font-size: 10px;
+      color: var(--pg-muted);
+      min-width: 36px;
+      text-align: right;
+    }
+    .ctl button {
+      cursor: pointer;
+      padding: 4px 10px;
+    }
+    .ctl button:hover { background: #2d2b27; border-color: #4ade80; }
+    .ctl button:active { background: #4ade80; color: #000; }
+
+    .preview {
+      overflow: auto;
+      padding: 24px;
+      background: #0a0a0a;
+    }
+    .preview-frame {
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+      overflow: hidden;
+      transition: width 0.25s ease;
+      margin: 0 auto;
+    }
+
+    .prompt-bar {
+      padding: 12px 20px;
+      border-top: 1px solid var(--pg-border);
+      background: #15140f;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .prompt-bar .label {
+      color: var(--pg-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+    .prompt-bar .text {
+      flex: 1;
+      color: var(--pg-fg);
+      font-family: var(--pg-mono);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .prompt-bar button {
+      background: #232220;
+      color: var(--pg-fg);
+      border: 1px solid var(--pg-border);
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: var(--pg-sans);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .prompt-bar button:hover { border-color: #4ade80; }
+    .prompt-bar button.copied { background: #4ade80; color: #000; border-color: #4ade80; }
+
+    /* 滚动条 */
+    .controls::-webkit-scrollbar, .preview::-webkit-scrollbar { width: 6px; height: 6px; }
+    .controls::-webkit-scrollbar-track, .preview::-webkit-scrollbar-track { background: transparent; }
+    .controls::-webkit-scrollbar-thumb, .preview::-webkit-scrollbar-thumb { background: #2c2a26; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span class="accent">Campus Food Recommend</span> · F-16.1 Playground</h1>
+    <span class="meta">5 view 占位 + token 实时调节 · ADR-0011 / ADR-0012</span>
+  </header>
+
+  <main>
+    <aside class="controls">
+      <section>
+        <h2>视图 / Viewport</h2>
+        <div class="ctl">
+          <label>当前视图</label>
+          <select id="ctl-view">
+            <option value="login">LoginView</option>
+            <option value="main" selected>MainView</option>
+            <option value="admin">AdminView</option>
+            <option value="observability">ObservabilityView</option>
+            <option value="notfound">NotFoundView</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <label>Viewport</label>
+          <select id="ctl-viewport">
+            <option value="1440" selected>Desktop 1440px</option>
+            <option value="1024">Tablet 1024px</option>
+            <option value="375">Mobile 375px</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <label>主题</label>
+          <select id="ctl-theme">
+            <option value="light" selected>浅色</option>
+            <option value="dark">深色</option>
+          </select>
+        </div>
+      </section>
+
+      <section>
+        <h2>色板 / Palette</h2>
+        <div class="ctl"><label>Primary 校园绿</label><input type="color" id="ctl-primary" value="#3D8B5F" /></div>
+        <div class="ctl"><label>Secondary 暖橙</label><input type="color" id="ctl-secondary" value="#E0A458" /></div>
+        <div class="ctl"><label>Accent 校园红</label><input type="color" id="ctl-accent" value="#C75450" /></div>
+        <div class="ctl"><label>背景</label><input type="color" id="ctl-bg" value="#FAF7F2" /></div>
+      </section>
+
+      <section>
+        <h2>几何 / Geometry</h2>
+        <div class="ctl"><label>圆角</label><input type="range" id="ctl-radius" min="0" max="20" value="8" step="1" /><span class="val" id="val-radius">8px</span></div>
+        <div class="ctl"><label>阴影</label><input type="range" id="ctl-shadow" min="0" max="24" value="6" step="1" /><span class="val" id="val-shadow">6px</span></div>
+        <div class="ctl"><label>字号 scale</label><input type="range" id="ctl-fontscale" min="0.875" max="1.5" value="1" step="0.0625" /><span class="val" id="val-fontscale">1.00</span></div>
+      </section>
+
+      <section>
+        <h2>预设 / Presets</h2>
+        <div class="ctl"><label>招实习现场(默认)</label><button data-preset="interview">应用</button></div>
+        <div class="ctl"><label>深色实验</label><button data-preset="dark">应用</button></div>
+        <div class="ctl"><label>暖色调暖</label><button data-preset="warm">应用</button></div>
+      </section>
+
+      <section style="border-top: 1px solid var(--pg-border); padding-top: 12px; margin-top: 24px;">
+        <p style="font-size: 10px; color: var(--pg-muted); line-height: 1.6;">
+          <strong style="color: var(--pg-fg);">说明</strong>:本 playground 渲染 F-16.1 已落地的 5 view 占位与视觉 token demo(Q6=b)。调整左侧控件,<strong style="color: var(--pg-fg);">底部 prompt 自动生成同步 design.md + Tailwind config 的指令</strong>。
+        </p>
+        <p style="font-size: 10px; color: var(--pg-muted); line-height: 1.6; margin-top: 8px;">
+          <strong style="color: var(--pg-fg);">范围提醒</strong>:本 playground <strong style="color: #fbbf24;">仅展示视觉 token 与 view 占位</strong>,不含 JWT 拦截器 / API 调用 / 业务组件(F-16.2+ scope)。企业级全栈业务逻辑需新开 ADR + grill。
+        </p>
+      </section>
+    </aside>
+
+    <div class="preview">
+      <div class="preview-frame" id="preview-frame"></div>
+    </div>
+  </main>
+
+  <div class="prompt-bar">
+    <span class="label">Prompt ›</span>
+    <span class="text" id="prompt-text">Playground 渲染 MainView,使用默认 design tokens。</span>
+    <button id="copy-btn">Copy</button>
+  </div>
+
+  <script>
+    "use strict";
+
+    /* === 状态与默认值 === */
+    const DEFAULTS = {
+      primary:   "#3D8B5F",
+      secondary: "#E0A458",
+      accent:    "#C75450",
+      bg:        "#FAF7F2",
+      radius:    8,
+      shadow:    6,
+      fontscale: 1.0,
+      view:      "main",
+      viewport:  1440,
+      theme:     "light",
+    };
+
+    const state = { ...DEFAULTS };
+
+    const VIEW_NAMES = {
+      login: "LoginView", main: "MainView", admin: "AdminView",
+      observability: "ObservabilityView", notfound: "NotFoundView",
+    };
+
+    /* === 工具函数 === */
+    function shade(hex, p) {
+      // 颜色加深(p<0) | 变浅(p>0),p∈[-1,1]
+      const n = parseInt(hex.slice(1), 16);
+      const r = Math.max(0, Math.min(255, ((n >> 16) & 0xff) + Math.round(p * 60)));
+      const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + Math.round(p * 60)));
+      const b = Math.max(0, Math.min(255, (n & 0xff) + Math.round(p * 60)));
+      return "#" + ((r << 16) | (g << 8) | b).toString(16).padStart(6, "0");
+    }
+
+    /* === 5 view 渲染(模拟 F-16.1 实际 vue 模板)== */
+    function renderView() {
+      const p50 = shade(state.primary, 0.15);
+      const p600 = shade(state.primary, -0.15);
+      const p700 = shade(state.primary, -0.3);
+      const s50 = shade(state.secondary, 0.05);
+      const textPri = state.theme === "light" ? "#2C2A26" : "#FAF7F2";
+      const textSec = state.theme === "light" ? "#6B6862" : "#A8A49C";
+      const surface = state.theme === "light" ? "#FFFFFF" : "#1F1E1B";
+      const border = state.theme === "light" ? "#E8E4DD" : "#3A3833";
+      const bg = state.bg;
+      const radius = state.radius + "px";
+      const shadow = `0 ${state.shadow / 4}px ${state.shadow}px rgba(${state.theme === "light" ? "44, 42, 38" : "0, 0, 0"}, ${state.theme === "light" ? "0.06" : "0.30"})`;
+      const fs = state.fontscale;
+
+      const baseStyle = `
+        <style>
+          .vroot {
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: ${textPri};
+            background: ${bg};
+            padding: 24px;
+            font-size: ${16 * fs}px;
+            line-height: 1.5;
+            min-height: 100%;
+          }
+          .vroot h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 16px; letter-spacing: -0.01em; }
+          .vroot h2 { font-size: 1.125em; font-weight: 500; margin: 20px 0 8px; color: ${textPri}; }
+          .vroot .banner {
+            background: ${s50};
+            color: ${shade(state.secondary, -0.3)};
+            border: 1px solid ${state.secondary};
+            border-radius: 6px;
+            padding: 12px 16px;
+            font-size: 0.875em;
+          }
+          .vroot .surface {
+            background: ${surface};
+            border: 1px solid ${border};
+            border-radius: ${radius};
+            box-shadow: ${shadow};
+            padding: 16px;
+          }
+          .vroot .btn-primary {
+            background: ${state.primary};
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: ${radius};
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+          }
+          .vroot .btn-primary:hover { background: ${p600}; }
+          .vroot .text-secondary { color: ${textSec}; }
+          .vroot .swatch {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 40px;
+            padding: 0 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 0.75em;
+            font-weight: 500;
+            min-width: 80px;
+          }
+        </style>
+      `;
+
+      const body =
+        state.view === "login" ? renderLogin() :
+        state.view === "main" ? renderMain() :
+        state.view === "admin" ? renderAdmin() :
+        state.view === "observability" ? renderObservability() :
+        renderNotFound();
+
+      return baseStyle + `<div class="vroot">${body}</div>`;
+    }
+
+    function renderLogin() {
+      const swatches = [
+        { name: "primary-500",   bg: state.primary,   fg: "white" },
+        { name: "secondary-500", bg: state.secondary, fg: "white" },
+        { name: "accent-500",    bg: state.accent,    fg: "white" },
+        { name: "bg",            bg: state.bg,        fg: state.theme === "light" ? "#2C2A26" : "white" },
+        { name: "surface",       bg: state.theme === "light" ? "#FFFFFF" : "#1F1E1B", fg: state.theme === "light" ? "#2C2A26" : "white" },
+      ];
+      const sizes = [
+        { token: "xs",   px: 12 }, { token: "sm",   px: 14 },
+        { token: "base", px: 16 }, { token: "lg",   px: 18 },
+        { token: "xl",   px: 20 }, { token: "2xl",  px: 24 }, { token: "3xl", px: 30 },
+      ];
+      return `
+        <h1>LoginView</h1>
+        <div class="banner">F-16.1 placeholder · 完整登录留作 F-16.2。</div>
+        <h2>视觉 token demo · 色板</h2>
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;">
+          ${swatches.map(s => `
+            <div>
+              <div class="swatch" style="background: ${s.bg}; color: ${s.fg};">${s.name}</div>
+              <p style="font-size: 0.75em; color: var(--text-secondary, ${state.theme === "light" ? "#6B6862" : "#A8A49C"}); margin-top: 6px;">
+                ${s.bg.toLowerCase()}
+              </p>
+            </div>
+          `).join("")}
+        </div>
+        <h2>视觉 token demo · 字号</h2>
+        <div class="surface">
+          ${sizes.map(s => `
+            <div style="margin: 4px 0; display: flex; align-items: baseline; gap: 16px;">
+              <span style="font-family: monospace; font-size: 12px; color: #888; min-width: 100px;">text-${s.token} (${s.px}px)</span>
+              <span style="font-size: ${s.px}px;">校园美食推荐 demo</span>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderMain() {
+      const radii = [4, 6, 8, 12];
+      const shadows = [2, 6, 12, 20];
+      return `
+        <h1>MainView</h1>
+        <div class="banner">F-16.1 placeholder · 主路径四阶段流程留作 F-16.2。</div>
+        <h2>视觉 token demo · 圆角</h2>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+          ${radii.map(r => `
+            <div class="surface" style="border-radius: ${r}px; text-align: center; padding: 24px 8px;">
+              <span style="font-weight: 500;">${r}px</span>
+            </div>
+          `).join("")}
+        </div>
+        <h2>视觉 token demo · 阴影</h2>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+          ${shadows.map(s => `
+            <div class="surface" style="box-shadow: 0 ${s / 4}px ${s}px rgba(0,0,0,0.08); text-align: center; padding: 24px 8px;">
+              <span style="font-weight: 500;">${s}px</span>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderAdmin() {
+      return `
+        <h1>AdminView</h1>
+        <div class="banner">F-16.1 placeholder · Admin 3 sub-tab 留作 F-16.4。</div>
+        <h2>视觉 token demo · 语义色</h2>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+          <div class="swatch" style="background: ${state.primary}; color: white;">success</div>
+          <div class="swatch" style="background: ${state.secondary}; color: white;">warning</div>
+          <div class="swatch" style="background: ${state.accent}; color: white;">error</div>
+          <div class="swatch" style="background: #4A6FA5; color: white;">info</div>
+        </div>
+        <h2>视觉 token demo · hit_tier</h2>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <span style="background: ${shade(state.primary, 0.15)}; color: ${shade(state.primary, -0.3)}; padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: 500;">mock</span>
+          <span style="background: #EAF0F8; color: #34527A; padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: 500;">dashscope</span>
+          <span style="background: ${shade(state.secondary, 0.05)}; color: ${state.accent}; padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: 500;">fallback</span>
+        </div>
+        <p style="font-size: 0.75em; color: ${state.theme === "light" ? "#6B6862" : "#A8A49C"}; margin-top: 8px;">
+          推荐结果卡片右上角角标使用,招实习现场一眼可辨"这次推荐命中哪一层"。
+        </p>
+      `;
+    }
+
+    function renderObservability() {
+      const spaces = [
+        { name: "space-1", px: 4 },  { name: "space-2", px: 8 },
+        { name: "space-3", px: 12 }, { name: "space-4", px: 16 },
+        { name: "space-6", px: 24 }, { name: "space-8", px: 32 },
+      ];
+      return `
+        <h1>ObservabilityView</h1>
+        <div class="banner">F-16.1 placeholder · 自绘指标留作 F-16.3。</div>
+        <h2>视觉 token demo · 间距 scale(4px base)</h2>
+        <div class="surface">
+          ${spaces.map(s => `
+            <div style="display: flex; align-items: center; gap: 16px; margin: 6px 0;">
+              <span style="font-family: monospace; font-size: 12px; color: #888; min-width: 120px;">${s.name} (${s.px}px)</span>
+              <span style="background: ${state.primary}; height: 16px; width: ${s.px}px; border-radius: 2px;"></span>
+            </div>
+          `).join("")}
+        </div>
+        <h2>空态 / 错误态</h2>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+          <div class="surface" style="text-align: center; padding: 48px 16px;">
+            <p style="font-weight: 500;">暂无指标数据</p>
+            <p style="font-size: 0.875em; color: #888; margin-top: 8px;">dev profile 默认不启用 /actuator/prometheus</p>
+          </div>
+          <div class="surface" style="text-align: center; padding: 48px 16px;">
+            <p style="color: ${state.accent}; font-weight: 500;">加载失败</p>
+            <p style="font-size: 0.875em; color: #888; margin-top: 8px;">指标源不可达,点击下方按钮重试。</p>
+            <button class="btn-primary" style="margin-top: 16px;">重试</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderNotFound() {
+      return `
+        <div class="surface" style="text-align: center; padding: 80px 16px;">
+          <h1 style="font-size: 3em; color: ${shade(state.primary, -0.3)}; margin: 0;">404</h1>
+          <p style="font-weight: 500; margin: 16px 0 8px;">页面不存在</p>
+          <p style="font-size: 0.875em; color: #888;">您访问的路径不在 demo 范围。</p>
+          <button class="btn-primary" style="margin-top: 24px;">回到主路径</button>
+        </div>
+      `;
+    }
+
+    /* === Prompt 输出 === */
+    function updatePrompt() {
+      const parts = [];
+      if (state.primary !== DEFAULTS.primary)     parts.push("primary 调整为 " + state.primary);
+      if (state.secondary !== DEFAULTS.secondary) parts.push("secondary 调整为 " + state.secondary);
+      if (state.accent !== DEFAULTS.accent)       parts.push("accent 调整为 " + state.accent);
+      if (state.bg !== DEFAULTS.bg)               parts.push("背景调整为 " + state.bg);
+      if (state.radius !== DEFAULTS.radius)       parts.push("圆角 " + state.radius + "px");
+      if (state.shadow !== DEFAULTS.shadow)       parts.push("阴影 " + state.shadow + "px");
+      if (state.fontscale !== DEFAULTS.fontscale) parts.push("字号 scale " + state.fontscale.toFixed(2));
+      if (state.theme !== DEFAULTS.theme)         parts.push(state.theme === "dark" ? "深色主题" : "浅色主题");
+
+      const viewName = VIEW_NAMES[state.view];
+      const viewportPx = state.viewport + "px";
+      let prompt;
+      if (parts.length === 0) {
+        prompt = "Playground 渲染 " + viewName + " (" + viewportPx + "),使用默认 design tokens。如需调整,请用左侧控件修改。";
+      } else {
+        prompt = "Playground 渲染 " + viewName + " (" + viewportPx + ")," + parts.join("; ") + "。请同步更新 docs/design/frontend/visual-system.md §2 与 frontend/tailwind.config.ts + frontend/src/styles/tokens.css。";
+      }
+      document.getElementById("prompt-text").textContent = prompt;
+    }
+
+    /* === 同步控件显示 === */
+    function syncControls() {
+      document.getElementById("ctl-view").value = state.view;
+      document.getElementById("ctl-viewport").value = state.viewport;
+      document.getElementById("ctl-theme").value = state.theme;
+      document.getElementById("ctl-primary").value = state.primary;
+      document.getElementById("ctl-secondary").value = state.secondary;
+      document.getElementById("ctl-accent").value = state.accent;
+      document.getElementById("ctl-bg").value = state.bg;
+      document.getElementById("ctl-radius").value = state.radius;
+      document.getElementById("ctl-shadow").value = state.shadow;
+      document.getElementById("ctl-fontscale").value = state.fontscale;
+    }
+
+    /* === 主更新 === */
+    function updateAll() {
+      const preview = document.getElementById("preview-frame");
+      preview.style.width = state.viewport + "px";
+      preview.innerHTML = renderView();
+      document.getElementById("val-radius").textContent = state.radius + "px";
+      document.getElementById("val-shadow").textContent = state.shadow + "px";
+      document.getElementById("val-fontscale").textContent = state.fontscale.toFixed(2);
+      updatePrompt();
+    }
+
+    /* === 控件绑定 === */
+    const numKeys = { radius: 1, shadow: 1, viewport: 1 };
+    document.querySelectorAll("[id^=ctl-]").forEach(ctl => {
+      ctl.addEventListener("input", e => {
+        const key = ctl.id.slice(4);
+        if (key === "fontscale") state[key] = parseFloat(e.target.value);
+        else if (key in numKeys) state[key] = parseInt(e.target.value);
+        else state[key] = e.target.value;
+        updateAll();
+      });
+    });
+
+    /* === 预设 === */
+    document.querySelectorAll("[data-preset]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const preset = btn.dataset.preset;
+        if (preset === "interview") Object.assign(state, DEFAULTS);
+        else if (preset === "dark") {
+          Object.assign(state, DEFAULTS, {
+            bg: "#1F1E1B",
+            primary: "#4FA378",
+            secondary: "#E0A458",
+            accent: "#D26560",
+            theme: "dark",
+          });
+        } else if (preset === "warm") {
+          Object.assign(state, DEFAULTS, {
+            primary: "#C25B4A",
+            secondary: "#D49A50",
+            accent: "#9C4444",
+            bg: "#FFF4EB",
+          });
+        }
+        syncControls();
+        updateAll();
+      });
+    });
+
+    /* === Copy === */
+    document.getElementById("copy-btn").addEventListener("click", () => {
+      const text = document.getElementById("prompt-text").textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById("copy-btn");
+        btn.textContent = "Copied!";
+        btn.classList.add("copied");
+        setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 1500);
+      }).catch(() => {
+        // fallback for file:// protocol(no clipboard API)
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); } catch (_) {}
+        document.body.removeChild(ta);
+      });
+    });
+
+    /* === 启动 === */
+    updateAll();
+  </script>
+</body>
+</html>
