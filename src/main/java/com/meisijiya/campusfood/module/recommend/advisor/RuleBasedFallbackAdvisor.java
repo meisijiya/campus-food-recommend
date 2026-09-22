@@ -61,8 +61,10 @@ public class RuleBasedFallbackAdvisor implements BaseAdvisor {
 
     @Override
     public int getOrder() {
-        // 比 ReflectiveRetryAdvisor 靠内:retry 先做完,失败才走到 fallback。
-        return Ordered.LOWEST_PRECEDENCE;
+        // F-15 fix:位于 ReflectiveRetryAdvisor(L-100)与 ChatModelCallAdvisor(L=MAX)之间
+        // ——stable sort 不会让同 order tie-break,RBFA.order = MAX-50 < CM.order = MAX,
+        // RBFA 真正在 CM 之前,attempt=1 直通 CM(不接管),attempt=2 拦截 CM 响应接管(保留 metadata)。
+        return Ordered.LOWEST_PRECEDENCE - 50;
     }
 
     @Override
@@ -77,14 +79,16 @@ public class RuleBasedFallbackAdvisor implements BaseAdvisor {
 
     @Override
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
-        // F-14 fix:Spring AI 1.1.x 的 CallAdvisorChain 接口没有 hasNext(),且 Spring AI
-        // 1.1.2 DefaultAroundAdvisorChain.reOrder() 在 RBFA.order == ChatModelCallAdvisor.order
-        // (都是 LOWEST_PRECEDENCE = Integer.MAX_VALUE) 的 stable sort 下把 CM 排在 RBFA 前,
-        // 实际执行顺序是 [RRA → CM → RBFA]。ReflectiveRetryAdvisor 的 retry 路径会把 RBFA
-        // 触发,但此时 deque 已被 RRA first call (pop CM) + retry pop RBFA 耗尽,
-        // RBFA 调 chain.nextCall() 会抛 IllegalStateException("No CallAdvisors available to execute")。
-        // 这里捕获该异常后直接产 fallback JSON,跳过下游调用 ——
-        // RBFA 是 chain 末位 + 兜底角色,逻辑上不需要也不应该继续 chain。
+        // F-15 fix (前序 F-14):RBFA.order 现在是 LOWEST_PRECEDENCE - 50(MAX-50),
+        // ChatModelCallAdvisor.order 是 LOWEST_PRECEDENCE(MAX),stable sort 不再 tie-break
+        // ——RBFA 真正排在 CM 之前。两条主路径:
+        //   - attempt=1:RRA 调 chain.nextCall 第一次,pop 顺序 [RRA → RBFA → CM]。RBFA 直通
+        //     (isRetryAttempt=false),CM 真实调用,RBFA 拿到 CM 响应后再判断 attempt=1 → 直通。
+        //   - attempt=2:RRA 触发重试,第二次 nextCall pop 顺序仍是 [RRA → RBFA → CM],
+        //     CM 真实调用,RBFA 拿到 CM 响应后判断 attempt=2 + 不合规 → buildFallbackReplacedResponse
+        //     接管(保留 CM metadata)。
+        // 残留 fallback try-catch(F-14 防御):即便因框架升级等出现 deque-empty,仍兜底产 fallback,
+        // 但 F-15 order 修复后实际不会走这条分支。
         ChatClientResponse response;
         try {
             response = chain.nextCall(request);

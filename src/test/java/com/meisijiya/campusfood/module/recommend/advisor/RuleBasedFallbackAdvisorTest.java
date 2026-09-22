@@ -113,10 +113,24 @@ class RuleBasedFallbackAdvisorTest {
     }
 
     @Test
-    @DisplayName("getOrder:LOWEST_PRECEDENCE — 比 ReflectiveRetryAdvisor 靠内")
+    @DisplayName("getOrder:LOWEST_PRECEDENCE - 50 — 位于 RRA(L-100)与 ChatModel(L=MAX)之间")
     void getOrder_innerRelativeToRetry() {
         ReflectiveRetryAdvisor retry = new ReflectiveRetryAdvisor(validator);
-        assertThat(advisor.getOrder()).isGreaterThan(retry.getOrder());
+        // F-15 fix:order 调到 LOWEST_PRECEDENCE - 50(MAX-50)。
+        // 三层关系断言:RRA < RBFA < CM(RBFA 在 CM 之前,否则会被 tie-break stable sort 把 CM 排在 RBFA 前 → RBFA 沦为 retry-only 兜底)。
+        int rra = retry.getOrder();
+        int rbfa = advisor.getOrder();
+        assertThat(rbfa)
+                .as("RBFA.order 必须严格大于 RRA.order(即 RBFA 在 RRA 内层,retry 先做完)")
+                .isGreaterThan(rra);
+        assertThat(rbfa)
+                .as("RBFA.order 必须严格小于 Integer.MAX_VALUE(即 RBFA 在 ChatModel 之前,first-attempt 拦截可达)")
+                .isLessThan(Integer.MAX_VALUE);
+        assertThat(rbfa)
+                .as("RBFA.order 必须严格大于 LOWEST_PRECEDENCE - 100(即 RBFA 在 RRA 之后,role chain 顺序 RRA → RBFA → CM)")
+                .isGreaterThan(org.springframework.core.Ordered.LOWEST_PRECEDENCE - 100);
+        // acceptance 显式值断言
+        assertThat(rbfa).isEqualTo(Integer.MAX_VALUE - 50);
     }
 
     // ---------- helpers ----------

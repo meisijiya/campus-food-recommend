@@ -15,7 +15,9 @@ import com.meisijiya.campusfood.module.recommend.advisor.RuleBasedFallbackAdviso
  * 包成 {@link ChatClient},在 defaultAdvisors 上挂 F-3 的两个顾问 ——
  * <ol>
  *   <li>{@link ReflectiveRetryAdvisor}({@code LOWEST_PRECEDENCE - 100})— 外层先跑,做反思重试</li>
- *   <li>{@link RuleBasedFallbackAdvisor}({@code LOWEST_PRECEDENCE})— 内层后跑,仅在 attempt=2 且不合规时接管</li>
+ *   <li>{@link RuleBasedFallbackAdvisor}({@code LOWEST_PRECEDENCE - 50})— between RRA(L-100) and CM(L),
+ *       attempt=1 直通 CM,attempt=2 拦截接管(F-15 修复,此前 RBFA=L=CM=L stable sort 把 CM 排前,
+ *       first-attempt 拦截语义实际不可达)</li>
  * </ol>
  *
  * <p>不需要在 Controller / Service 里关心 advisor 编排 ——

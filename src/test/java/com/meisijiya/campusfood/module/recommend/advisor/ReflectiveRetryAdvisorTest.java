@@ -109,9 +109,16 @@ class ReflectiveRetryAdvisorTest {
     }
 
     @Test
-    @DisplayName("getOrder:LOWEST_PRECEDENCE - 100 — 比 RuleBasedFallbackAdvisor 靠外")
+    @DisplayName("getOrder:LOWEST_PRECEDENCE - 100 — 严格最外层(RRA < RBFA,RBFA.order 现在是 MAX-50)")
     void getOrder_outerRelativeToFallback() {
-        assertThat(advisor.getOrder()).isLessThan(new RuleBasedFallbackAdvisor(validator).getOrder());
+        // F-15 同步:RRA.order 不变(MAX-100),RBFA.order 现在是 MAX-50;
+        // 语义未变(RRA 仍在最外层,RBFA 仍在 RRA 内层),displayName 加注 RBFA 新值便于回归期一眼看出。
+        int rra = advisor.getOrder();
+        int rbfa = new RuleBasedFallbackAdvisor(validator).getOrder();
+        assertThat(rra)
+                .as("RRA.order 必须严格小于 RBFA.order(MAX-100 < MAX-50,retry 先跑)")
+                .isLessThan(rbfa);
+        assertThat(rra).isEqualTo(Integer.MAX_VALUE - 100);
         assertThat(advisor.getName()).isEqualTo("reflective-retry-advisor");
     }
 
