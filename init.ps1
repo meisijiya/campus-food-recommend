@@ -241,7 +241,7 @@ if (-not (Test-Path $frontendDir)) {
         }
 
         # vitest + coverage(楠岃瘉 5 涓噸鐐?store + recommend 绾嚱鏁?coverage >= 80%)
-        Write-Host "[init.sh] 8/8 step 2/3: vitest + coverage ..."
+        Write-Host "[init.sh] 8/8 step 2/4: vitest + coverage ..."
         & $npmBin run test:coverage 2>&1 | Select-Object -Last 25
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[init.sh] FAIL: vitest / coverage 鏈€氳繃(鎴?80% 闃愬€嶆湭婊¤冻)"
@@ -249,8 +249,17 @@ if (-not (Test-Path $frontendDir)) {
             exit 1
         }
 
+        # Playwright e2e(楠岃瘉 journey + rate-limit 涓や釜 spec;闇€瑕佸悗绔?8080 瀛樺湪)
+        Write-Host "[init.sh] 8/8 step 3/4: playwright e2e ..."
+        & $npmBin run test:e2e 2>&1 | Select-Object -Last 20
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[init.sh] FAIL: playwright e2e 鏈€氳繃"
+            Pop-Location
+            exit 1
+        }
+
         # vite build(瀹為檯鏋勫缓,楠岃瘉鏁翠釜閾捐矾)
-        Write-Host "[init.sh] 8/8 step 3/3: vite build ..."
+        Write-Host "[init.sh] 8/8 step 4/4: vite build ..."
         & $npmBin run build 2>&1 | Select-Object -Last 15
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[init.sh] FAIL: vite build 鏈€氳繃"

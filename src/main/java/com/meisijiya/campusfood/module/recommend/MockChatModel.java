@@ -33,7 +33,7 @@ public class MockChatModel implements ChatModel {
 
     private static final String MOCK_RECOMMENDATION = """
             {
-              "merchantId": ["m-001"],
+              "merchantId": ["EVM-000"],
               "reason": "Mock 推荐:F-1 占位返回,F-3 阶段会接入真实百炼",
               "confidence": 0.85
             }

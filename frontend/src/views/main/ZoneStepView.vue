@@ -21,10 +21,11 @@ const session = useSessionStore();
 const router = useRouter();
 
 const ZONES = [
-  { id: "Z001", name: "东区食堂圈" },
-  { id: "Z002", name: "西区食堂圈" },
-  { id: "Z003", name: "南门小吃街" },
-  { id: "Z004", name: "北门商业街" },
+  { id: "Z-E00", name: "东区食堂圈" },
+  { id: "Z-E01", name: "西区食堂圈" },
+  { id: "Z-E02", name: "南门小吃街" },
+  { id: "Z-E03", name: "北门商业街" },
+  { id: "Z-E04", name: "中心商圈" },
 ];
 
 const pickedZoneId = ref<string | null>(null);

@@ -39,13 +39,19 @@ public class RuleBasedFallbackAdvisor implements BaseAdvisor {
 
     private static final Logger log = LoggerFactory.getLogger(RuleBasedFallbackAdvisor.class);
 
-    /** F-3 mock 候选目录;F-4 起替换为 Redis 真实 catalog。 */
+    /**
+     * F-3 mock 候选目录;F-4 起替换为 Redis 真实 catalog。
+     *
+     * <p>F-16.2 polish:改用真实 seed merchant id(后端 {@code seed-100-merchants.sql}
+     * 创建 EVM-000 ~ EVM-099),保证 recommend 返回的 id 能被 {@code /api/merchant/{id}} 解析。
+     * 之前用 {@code m-001} 等假 id,前端 RecommendView 拉详情 404 → 卡片过滤掉 → merchant-card DOM 0 个 → e2e 旅程 test 失败。
+     */
     static final List<CandidateMerchant> MOCK_CATALOG = List.of(
-            new CandidateMerchant("m-001", "黄焖鸡米饭", List.of("中式", "快餐", "便宜")),
-            new CandidateMerchant("m-002", "兰州拉面",   List.of("中式", "面食")),
-            new CandidateMerchant("m-003", "麻辣香锅",   List.of("中式", "辣")),
-            new CandidateMerchant("m-004", "肯德基",     List.of("西式", "快餐")),
-            new CandidateMerchant("m-005", "麦当劳",     List.of("西式", "快餐"))
+            new CandidateMerchant("EVM-000", "黄焖鸡米饭", List.of("中式", "快餐", "便宜")),
+            new CandidateMerchant("EVM-001", "兰州拉面",   List.of("中式", "面食")),
+            new CandidateMerchant("EVM-002", "麻辣香锅",   List.of("中式", "辣")),
+            new CandidateMerchant("EVM-003", "肯德基",     List.of("西式", "快餐")),
+            new CandidateMerchant("EVM-004", "麦当劳",     List.of("西式", "快餐"))
     );
 
     private final JsonSchemaValidator validator;

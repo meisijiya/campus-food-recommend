@@ -34,13 +34,16 @@ interface CuisineGroup {
 }
 
 const CUISINE_LABELS: Record<string, string> = {
-  C001: "面食",
-  C002: "米饭快餐",
-  C003: "麻辣烫",
-  C004: "烧烤",
-  C005: "奶茶甜品",
-  C006: "西餐",
-  C007: "其他",
+  "C-E00": "面食",
+  "C-E01": "米饭快餐",
+  "C-E02": "麻辣烫",
+  "C-E03": "烧烤",
+  "C-E04": "奶茶甜品",
+  "C-E05": "西餐",
+  "C-E06": "川菜",
+  "C-E07": "粤菜",
+  "C-E08": "日韩料理",
+  "C-E09": "其他",
 };
 
 const cuisines = computed<CuisineGroup[]>(() => {

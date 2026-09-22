@@ -39,7 +39,7 @@ test.describe("招实习现场主路径旅程", () => {
     // 5. 点赞第一个商户(乐观更新)
     const merchantCard = page.getByTestId(/^merchant-card-/);
     const merchantId = await merchantCard.first().getAttribute("data-testid");
-    expect(merchantId).toMatch(/^merchant-card-M\d+/);
+    expect(merchantId).toMatch(/^merchant-card-[A-Za-z0-9-]+$/);
     const likeBtn = page.getByTestId(`like-btn-${merchantId!.replace("merchant-card-", "")}`);
     await likeBtn.click();
     await expect(likeBtn).toContainText("❤️");
