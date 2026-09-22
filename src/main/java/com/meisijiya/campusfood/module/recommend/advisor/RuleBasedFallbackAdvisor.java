@@ -82,11 +82,13 @@ public class RuleBasedFallbackAdvisor implements BaseAdvisor {
         // F-15 fix (前序 F-14):RBFA.order 现在是 LOWEST_PRECEDENCE - 50(MAX-50),
         // ChatModelCallAdvisor.order 是 LOWEST_PRECEDENCE(MAX),stable sort 不再 tie-break
         // ——RBFA 真正排在 CM 之前。两条主路径:
-        //   - attempt=1:RRA 调 chain.nextCall 第一次,pop 顺序 [RRA → RBFA → CM]。RBFA 直通
-        //     (isRetryAttempt=false),CM 真实调用,RBFA 拿到 CM 响应后再判断 attempt=1 → 直通。
+        //   - attempt=1:RRA 调 chain.nextCall 第一次,pop 顺序 [RRA → RBFA → CM]。RBFA 调
+        //     isRetryAttempt(request) → 读 request.context().get(RRA.ATTEMPT_KEY) → Integer 不为 2
+        //     → 返回 false → RBFA 直通 CM 响应(在 chain.nextCall 拿到 CM 响应后立即判断并透传)。
         //   - attempt=2:RRA 触发重试,第二次 nextCall pop 顺序仍是 [RRA → RBFA → CM],
-        //     CM 真实调用,RBFA 拿到 CM 响应后判断 attempt=2 + 不合规 → buildFallbackReplacedResponse
-        //     接管(保留 CM metadata)。
+        //     CM 真实调用。RBFA 拿到 CM 响应后 → isRetryAttempt(request) 返回 true →
+        //     校验不合规 → buildFallbackReplacedResponse 接管(保留 CM chatResponse metadata:
+        //     usage / model / token 计数等)。
         // 残留 fallback try-catch(F-14 防御):即便因框架升级等出现 deque-empty,仍兜底产 fallback,
         // 但 F-15 order 修复后实际不会走这条分支。
         ChatClientResponse response;
