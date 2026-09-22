@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campus Food Recommend · Demo · 登录</title>
+  <meta name="description" content="校园美食推荐平台 demo 前端 · 登录页视觉基调演示。本页面是 docs/design/frontend/visual-system.md 的可视化样例,纯静态,无 JavaScript。" />
+  <!--
+    这是 docs/design/frontend/design.md 的可视化样例。
+    严格静态、无任何执行性脚本标签、无外部 JS、无网络请求(已通过 init.ps1 stage 7 静态校验)。
+    所有 CSS token 来自 visual-system.md §8 :root 定义,与后续 F-16.1+ 实施时 styles/tokens.css 字段一一对应。
+    本页面不是前端工程,是 design.md 的"招实习现场可演示物"。
+  -->
+  <style>
+    :root {
+      /* === primary === */
+      --color-primary-50:  #EEF5F0;
+      --color-primary-100: #D4E8DA;
+      --color-primary-500: #3D8B5F;
+      --color-primary-600: #2F7048;
+      --color-primary-700: #245539;
+
+      /* === secondary === */
+      --color-secondary-50:  #FBF1E1;
+      --color-secondary-500: #E0A458;
+      --color-secondary-700: #A87530;
+
+      /* === accent === */
+      --color-accent-500: #C75450;
+      --color-accent-600: #A33E3B;
+
+      /* === neutral === */
+      --color-bg:              #FAF7F2;
+      --color-surface:         #FFFFFF;
+      --color-border:          #E8E4DD;
+      --color-border-strong:   #C9C4BB;
+      --color-text-primary:    #2C2A26;
+      --color-text-secondary:   #6B6862;
+      --color-text-disabled:   #A8A49C;
+      --color-text-on-primary: #FFFFFF;
+
+      /* === semantic === */
+      --color-success-500: #3D8B5F;
+      --color-warning-500: #E0A458;
+      --color-error-500:   #C75450;
+      --color-info-500:    #4A6FA5;
+
+      /* === space === */
+      --space-1:  0.25rem;
+      --space-2:  0.5rem;
+      --space-3:  0.75rem;
+      --space-4:  1rem;
+      --space-6:  1.5rem;
+      --space-8:  2rem;
+      --space-10: 2.5rem;
+
+      /* === radius === */
+      --radius-md: 0.375rem;
+      --radius-lg: 0.5rem;
+      --radius-xl: 0.75rem;
+
+      /* === shadow === */
+      --shadow-sm: 0 1px 3px rgba(44, 42, 38, 0.06), 0 1px 2px rgba(44, 42, 38, 0.04);
+
+      /* === font === */
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                   "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-num:  "Poppins", var(--font-sans);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--color-bg);
+      color: var(--color-text-primary);
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .page {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    /* === Header === */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-3) var(--space-6);
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-surface);
+      height: var(--space-12, 3rem);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-weight: 600;
+      color: var(--color-primary-700);
+      letter-spacing: -0.01em;
+    }
+
+    .brand-mark {
+      width: 24px; height: 24px;
+      border-radius: var(--radius-md);
+      background: var(--color-primary-500);
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--color-text-on-primary);
+      font-size: 14px;
+    }
+
+    .env-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-md);
+      background: var(--color-secondary-50);
+      color: var(--color-secondary-700);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* === Main === */
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-10);
+      padding: var(--space-10) var(--space-8);
+      max-width: 72rem;
+      width: 100%;
+      margin: 0 auto;
+      align-items: center;
+    }
+
+    @media (max-width: 768px) {
+      .main { grid-template-columns: 1fr; padding: var(--space-6); }
+      .left-panel { display: none; }
+    }
+
+    /* === Left: Brand panel === */
+    .left-panel { padding: var(--space-6); }
+    .brand-logo {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-3);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--color-primary-700);
+      letter-spacing: -0.01em;
+      margin-bottom: var(--space-6);
+    }
+
+    .brand-tagline {
+      font-size: 1.25rem;
+      color: var(--color-text-primary);
+      font-weight: 500;
+      line-height: 1.5;
+      margin-bottom: var(--space-6);
+    }
+
+    .feature-list {
+      list-style: none;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+      color: var(--color-text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .feature-check {
+      flex-shrink: 0;
+      width: 18px; height: 18px;
+      border-radius: var(--radius-md);
+      background: var(--color-primary-50);
+      color: var(--color-primary-700);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    /* === Right: Login form === */
+    .right-panel {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-xl);
+      padding: var(--space-8);
+      max-width: 28rem;
+      width: 100%;
+      justify-self: center;
+    }
+
+    .form-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin-bottom: var(--space-2);
+    }
+
+    .form-subtitle {
+      font-size: 0.875rem;
+      color: var(--color-text-secondary);
+      margin-bottom: var(--space-6);
+    }
+
+    .field { margin-bottom: var(--space-4); }
+
+    .field-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      margin-bottom: var(--space-2);
+    }
+
+    .field-label .required { color: var(--color-accent-500); }
+
+    .field-input {
+      width: 100%;
+      height: 2.5rem;
+      padding: 0 var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface);
+      color: var(--color-text-primary);
+      font-family: inherit;
+      font-size: 1rem;
+      outline: none;
+    }
+
+    .field-input::placeholder { color: var(--color-text-secondary); }
+
+    .field-input:focus {
+      border-color: var(--color-primary-500);
+      box-shadow: 0 0 0 3px var(--color-primary-100);
+    }
+
+    .field-hint {
+      font-size: 0.75rem;
+      color: var(--color-text-secondary);
+      margin-top: var(--space-1);
+    }
+
+    .submit-btn {
+      width: 100%;
+      height: 2.5rem;
+      border: none;
+      border-radius: var(--radius-lg);
+      background: var(--color-primary-500);
+      color: var(--color-text-on-primary);
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: var(--space-2);
+    }
+
+    .submit-btn:hover { background: var(--color-primary-600); }
+    .submit-btn:active { background: var(--color-primary-700); }
+
+    .demo-accounts {
+      margin-top: var(--space-6);
+      padding: var(--space-4);
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+    }
+
+    .demo-accounts-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: var(--space-2);
+    }
+
+    .demo-account-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.875rem;
+      color: var(--color-text-primary);
+      padding: var(--space-1) 0;
+      font-family: var(--font-num);
+    }
+
+    .demo-account-row span:first-child { font-weight: 500; }
+    .demo-account-row span:last-child {
+      color: var(--color-text-secondary);
+      font-family: var(--font-mono, monospace);
+    }
+
+    /* === Footer === */
+    .footer {
+      padding: var(--space-4) var(--space-6);
+      border-top: 1px solid var(--color-border);
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--color-text-secondary);
+    }
+
+    .footer code {
+      font-family: var(--font-mono, monospace);
+      background: var(--color-surface);
+      padding: 0 var(--space-1);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--color-border);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <span class="brand-mark">C</span>
+        <span>Campus Food Recommend</span>
+      </div>
+      <span class="env-badge">demo · static · no JS</span>
+    </header>
+
+    <!-- Main -->
+    <main class="main">
+
+      <!-- Left: Brand context -->
+      <section class="left-panel">
+        <div class="brand-logo">
+          <span style="width:32px;height:32px;border-radius:8px;background:var(--color-primary-500);display:inline-flex;align-items:center;justify-content:center;color:white;font-size:16px;">C</span>
+          <span>校园美食推荐</span>
+        </div>
+        <h1 class="brand-tagline">
+          从 12 个商圈到你的午餐。<br />
+          一个无状态 demo,7 个工程亮点。
+        </h1>
+        <ul class="feature-list">
+          <li class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>JWT 无状态鉴权 + 双层令牌桶限流</span>
+          </li>
+          <li class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>会话槽位四阶段(Zone → Cuisine → Merchant)</span>
+          </li>
+          <li class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>Spring AI 结构化输出 + 反思重试 + 规则 fallback</span>
+          </li>
+          <li class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>Caffeine L0 + Redis L1 + MySQL L2 三级缓存</span>
+          </li>
+          <li class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>Redis SETNX 幂等点赞 + RabbitMQ 异步落库</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Right: Login form -->
+      <section class="right-panel" aria-labelledby="login-title">
+        <h2 id="login-title" class="form-title">登录</h2>
+        <p class="form-subtitle">使用 demo 账号体验后端能力</p>
+
+        <form onsubmit="return false;" novalidate>
+          <div class="field">
+            <label class="field-label" for="username">
+              用户名 <span class="required">*</span>
+            </label>
+            <input
+              id="username"
+              class="field-input"
+              type="text"
+              placeholder="demo"
+              autocomplete="username"
+              aria-required="true"
+            />
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="password">
+              密码 <span class="required">*</span>
+            </label>
+            <input
+              id="password"
+              class="field-input"
+              type="password"
+              placeholder="demo"
+              autocomplete="current-password"
+              aria-required="true"
+            />
+            <p class="field-hint">dev profile 下不接真实后端;点登录不会有任何动作</p>
+          </div>
+
+          <button type="submit" class="submit-btn" aria-label="登录 demo 账号">
+            登录
+          </button>
+        </form>
+
+        <div class="demo-accounts" role="region" aria-label="演示账号">
+          <p class="demo-accounts-title">演示账号</p>
+          <div class="demo-account-row">
+            <span>demo / demo</span>
+            <span>STUDENT</span>
+          </div>
+          <div class="demo-account-row">
+            <span>admin / admin</span>
+            <span>STUDENT + ADMIN</span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>
+        本页面是 <code>docs/design/frontend/visual-system.md</code> 的可视化样例,无 JavaScript。
+        真实前端实施见 <code>F-16.1+</code>(尚未开工,ADR-0011 已采纳)。
+      </p>
+    </footer>
+
+  </div>
+</body>
+</html>

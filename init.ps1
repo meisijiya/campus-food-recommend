@@ -1,12 +1,13 @@
 # init.ps1 — 验证门禁(Windows PowerShell 版本)
 #
-# 6 阶段验证:
-#   1/6 编译 + 打 jar
-#   2/6 单元 + 集成测试(Mock profile)
-#   3/6 docker-compose 文件合法性
-#   4/6 dev profile 启动后 /actuator/health 检查
-#   5/6 JMeter F-1 5000+ QPS 压测(ADR-0005)
-#   6/6 locust F-5 P99<50ms 压测(待 F-5 完成才生效)
+# 7 阶段验证:
+#   1/7 编译 + 打 jar
+#   2/7 单元 + 集成测试(Mock profile)
+#   3/7 docker-compose 文件合法性
+#   4/7 dev profile 启动后 /actuator/health 检查
+#   5/7 JMeter F-1 5000+ QPS 压测(ADR-0005)
+#   6/7 locust F-5 P99<50ms 压测(待 F-5 完成才生效)
+#   7/7 frontend-design 文档校验(ADR-0011)
 #
 # 入口:bash init.sh(委托到这里),或直接 powershell -ExecutionPolicy Bypass -File init.ps1
 # 退出码:0 = PASS,非 0 = 失败。
@@ -157,3 +158,71 @@ if (Test-Path $likeCtrl) {
 }
 
 Write-Host "[init.sh] PASS:全部 6 阶段通过"
+
+# === 7/7 ===
+# ADR-0011 frontend-design 文档校验。本轮只产 design.md 不下前端工程,但文档须通过 stage 7
+# 才算 "design.md 落地"。校验失败 exit 1(同前 6 stage 一致硬约束)。
+Write-Host "[init.sh] 阶段 7/7: frontend-design 文档校验 ..."
+$designRoot = "docs/design/frontend"
+$adrPath    = "docs/adr/0011-frontend-design-decisions.md"
+
+$required = @(
+    @{ p = "$designRoot/overview.md";                  min = 80 },
+    @{ p = "$designRoot/visual-system.md";             min = 150 },
+    @{ p = "$designRoot/architecture.md";              min = 150 },
+    @{ p = "$designRoot/api-contract.md";              min = 120 },
+    @{ p = "$designRoot/observability-and-launch.md";  min = 120 },
+    @{ p = "$designRoot/mock/login.html";              min = 0 },
+    @{ p = $adrPath;                                   min = 50 },
+)
+$stage7Fail = $false
+foreach ($r in $required) {
+    if (-not (Test-Path $r.p)) {
+        Write-Host "[init.sh] FAIL: missing $($r.p)"
+        $stage7Fail = $true
+        continue
+    }
+    if ($r.min -gt 0) {
+        $lineCount = (Get-Content $r.p).Count
+        if ($lineCount -lt $r.min) {
+            Write-Host "[init.sh] FAIL: $($r.p) lines=$lineCount < min=$($r.min)"
+            $stage7Fail = $true
+        } else {
+            Write-Host "[init.sh] OK:   $($r.p) lines=$lineCount"
+        }
+    } else {
+        Write-Host "[init.sh] OK:   $($r.p) exists"
+    }
+}
+
+# visual-system.md 必须包含两个 token grep 关键字(决策 9)
+$vsPath = "$designRoot/visual-system.md"
+if (Test-Path $vsPath) {
+    $vsContent = Get-Content $vsPath -Raw
+    foreach ($kw in @("--color-primary:", "--space-4:")) {
+        if (-not $vsContent.Contains($kw)) {
+            Write-Host "[init.sh] FAIL: visual-system.md 缺关键字 $kw"
+            $stage7Fail = $true
+        }
+    }
+}
+
+# login.html 静态检查:不能含真正的脚本标签(决策 8,F-16 wontful 边界)
+# pattern 排除 HTML 注释内的字面字符串,只匹配执行性 <script ...> 或 <script> 开标签
+$mockPath = "$designRoot/mock/login.html"
+if (Test-Path $mockPath) {
+    $mockContent = Get-Content $mockPath -Raw
+    # 去掉 HTML 注释块(<!-- ... -->)再 grep,避免注释里 "<script>" 字面字符串误判
+    $mockNoComment = [regex]::Replace($mockContent, '<!--.*?-->', '', 'Singleline')
+    if ($mockNoComment -match '<script[\s>]') {
+        Write-Host "[init.sh] FAIL: mock/login.html 含执行性脚本标签(F-16 wontful 边界)"
+        $stage7Fail = $true
+    }
+}
+
+if ($stage7Fail) {
+    Write-Host "[init.sh] FAIL: stage 7 frontend-design 校验未过"
+    exit 1
+}
+Write-Host "[init.sh] PASS: 阶段 7/7 frontend-design 校验通过"
+Write-Host "[init.sh] PASS:全部 7 阶段通过"
