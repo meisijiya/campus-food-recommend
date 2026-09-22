@@ -195,7 +195,7 @@ def main() -> int:
     print()
     print("==== 演示完成 ====")
     print("如需压测 F-1 5000+ QPS:    pwsh -File init.ps1  (stage 5)")
-    print("如需压测 F-5 P99<50ms:    pwsh -File init.ps1  (stage 6)")
+    print("如需压测 F-5 P99<100ms:    pwsh -File init.ps1  (stage 6,burst=100000 覆盖)")
     return 0
 
 

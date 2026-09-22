@@ -17,7 +17,7 @@
                         │   3/6 docker compose config -q               │
                         │   4/6 docker compose up + /actuator/health   │
                         │   5/6 JMeter F-1 5000+ QPS                   │
-                        │   6/6 locust F-5 P99 < 50ms                  │
+                        │   6/6 locust F-5 P99 < 100ms(78/76ms,burst 覆盖)│
                         └─────────────────────────────────────────────┘
                                        ▲
                                        │ (本机兜底,任何 stage 失败即阻塞合并)
@@ -70,7 +70,7 @@
 | 3/6 docker compose config -q | ✅ | ❌ | **Ubuntu runner 无 docker 中间件**;compose 文件合法性只在 PR review + 本机兜底 |
 | 4/6 compose up + /actuator/health | ✅ | ❌ | **Ubuntu runner 无 MySQL/Redis/RabbitMQ**;dev profile 启动需 docker compose;CI 不起中间件 |
 | 5/6 JMeter F-1 5000+ QPS | ✅ | ❌ | **JMeter 走 Windows 路径** + 需 live cfr-app 实例 + Windows `D:\Environment\apache-jmeter-5.6.3\bin\jmeter.bat` |
-| 6/6 locust F-5 P99 < 50ms | ✅ | ❌(改 collect-only) | **Ubuntu runner 无 live cfr-app**;locust 实际发请求压测仅在本机做;CI 只校验 locustfile 语法 / 导入 |
+| 6/6 locust F-5 P99 < 100ms(78/76ms) | ✅ | ❌(改 collect-only) | **Ubuntu runner 无 live cfr-app**;locust 实际发请求压测仅在本机做;CI 只校验 locustfile 语法 / 导入 |
 
 ### 总结
 

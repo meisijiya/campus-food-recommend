@@ -33,7 +33,7 @@
 | flagKey | mode | 业务含义 | yml 行号 | 备注 |
 |---|---|---|---|---|
 | `recommend-v2` | `ALL_ON` | 新推荐路径全量开启(让 F-9 Grafana `recommend_total` 指标持续可见) | `application.yml:142-143` | F-13 改的;F-11 W3 时是 `PERCENTAGE 20` |
-| `like-cache-bypass` | `WHITELIST_ONLY [1, 2, 3]` | 白名单 sid 直查 MySQL,绕过 Redis L1 缓存(对比性能用) | `application.yml:144-146` | **F-5 bullet "P99 28/25ms" 依赖此边界,不可改 ALL_ON** |
+| `like-cache-bypass` | `WHITELIST_ONLY [1, 2, 3]` | 白名单 sid 直查 MySQL,绕过 Redis L1 缓存(对比性能用) | `application.yml:144-146` | **F-5 bullet "P99 < 100ms(78/76ms),26158 reqs 0 fail" 依赖此边界,不可改 ALL_ON** |
 | `merchant-detail-new` | `ALL_ON` | 商家详情 Map 额外字段 `openHours` + `featureFlag:ON` 全量开放 | `application.yml:147-148` | F-13 改的;F-11 W3 时是 `ALL_OFF` |
 
 ---

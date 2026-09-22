@@ -19,6 +19,8 @@ spring:
           temperature: 0.1
           # F-14.1:百炼 response_format=json_object 强制 model 输出标准 JSON 字符串
           # (prompt 必须含 "JSON" 关键词,已通过 RecommendService.RECOMMEND_TEMPLATE 强化实现)
+          # bench 实证:100 样本 first_attempt_valid_count=100 (100%),远超 88% target
+          # (commit ca8ac94 amend 后实测 first_attempt_compliance_rate=1.0,见 evidence/f3-compliance-rate.json)
           response-format:
             type: json_object
 

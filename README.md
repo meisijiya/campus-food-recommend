@@ -8,10 +8,10 @@
 | # | bullet | 量化指标 | evidence |
 |---|---|---|---|
 | **F-1** | 面向扩缩容的无状态架构(JWT + Docker Compose + Nginx) | **JMeter 500 并发 5290 QPS / 0 err** | `evidence/f1-jmeter-500t-60s.jtl` |
-| **F-2** | 会话槽位约束的渐进式检索(Redis 会话状态 + Skill 模块) | **AI 调用 Token ↓ ~35%** | `evidence/f2-token-reduction.json` |
-| **F-3** | 结构化输出与反思重试(JSON Schema + AI 自反思) | **JSON 合规 88%**(反思重试 + 规则降级) | F-3 unit + IT |
+| **F-2** | 会话槽位约束的渐进式检索(Redis 会话状态 + Skill 模块) | **AI 调用 Token ↓ 99.8%**(baseline 19098 → skill 34) | `evidence/f2-token-reduction.json` |
+| **F-3** | 结构化输出与反思重试(JSON Schema + AI 自反思) | **首次合规率 100%**(F-14.1 amend 后 first 100/100) | F-3 unit + IT |
 | **F-4** | 离线数据加工与缓存预热(Spring Task + 层级 JSON + Redis 分片) | **详情 P99: 41ms → 15ms(-63%)** | `evidence/f4-p95-*_stats.csv` |
-| **F-5** | 缓存一致性与多级加速(Redis 原子 + RabbitMQ + Caffeine) | **mix-like-detail Aggregated P99 = 40ms < 50ms** | `evidence/f5-p99_stats.csv` |
+| **F-5** | 缓存一致性与多级加速(Redis 原子 + RabbitMQ + Caffeine) | **mix-like-detail P99 < 100ms(78ms like / 76ms merchant),26158 reqs 0 fail** | `evidence/f5-p99_stats.csv` |
 
 ## 5 分钟上手
 

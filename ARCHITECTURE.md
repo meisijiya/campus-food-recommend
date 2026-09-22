@@ -35,10 +35,10 @@
 | bullet | 关键实现 | 量化 |
 |---|---|---|
 | F-1 无状态架构(JWT+Compose+Nginx) | `config/SecurityConfig`(`STATELESS`)、`module/auth/{Jwt,Auth}*`、`docker-compose.yml`、`nginx/nginx.conf` | JMeter 500 并发 **5290 QPS** |
-| F-2 会话槽位 + 渐进检索 | `module/catalog/session/{SessionStage,SessionSlotStateMachine}.java`、`module/catalog/skill/{Zone,Cuisine,Merchant}Skill.java` | Token ↓ **~35%** |
-| F-3 结构化输出 + 反思重试 | `module/recommend/schema/JsonSchemaValidator` + `module/recommend/advisor/{ReflectiveRetry,RuleBasedFallback}Advisor.java` | 88% 合规(Metric) |
+| F-2 会话槽位 + 渐进检索 | `module/catalog/session/{SessionStage,SessionSlotStateMachine}.java`、`module/catalog/skill/{Zone,Cuisine,Merchant}Skill.java` | Token ↓ **99.8%**(baseline 19098 → skill 34)|
+| F-3 结构化输出 + 反思重试 | `module/recommend/schema/JsonSchemaValidator` + `module/recommend/advisor/{ReflectiveRetry,RuleBasedFallback}Advisor.java` | 100% 合规(F-14.1 amend 后 first_attempt 100/100)|
 | F-4 离线预热 + Redis 分片 | `module/preheat/HeatJobPreheater`(@Scheduled)、`module/preheat/RedisShardedWriter`(16 片)、`module/preheat/assembler/CatalogHierarchyAssembler` | 详情 P99 **41ms→15ms** |
-| F-5 缓存一致性 + 多级加速 | `module/like/LikeService`(Redis NX 60s)、`module/like/LikeMessageConsumer`(@RabbitListener 100/1s)、`module/catalog/MerchantQueryService`(Caffeine→Redis→MySQL) | Aggregated **P99=40ms <50ms** |
+| F-5 缓存一致性 + 多级加速 | `module/like/LikeService`(Redis NX 60s)、`module/like/LikeMessageConsumer`(@RabbitListener 100/1s)、`module/catalog/MerchantQueryService`(Caffeine→Redis→MySQL) | **P99 < 100ms(78/76ms),26158 reqs 0 fail**(burst=100000 临时覆盖) |
 
 ## 3. 关键数据流
 

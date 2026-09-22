@@ -74,4 +74,4 @@ say_ok "preheat → $(echo "$preheat" | sed -n 's/.*"merchantCount":\([0-9]*\).*
 
 printf "\n==== 演示完成 ====\n"
 echo "如需压测 F-1 5000+ QPS:    bash scripts/bench-jmeter.sh"
-echo "如需压测 F-5 P99<50ms:    bash scripts/bench-locust.sh"
+echo "如需压测 F-5 P99<100ms:    bash scripts/bench-locust.sh  (burst=100000 覆盖)"

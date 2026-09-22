@@ -135,7 +135,7 @@ logging:
 # F-13 demo hardening(ADR-0009):recommend-v2 / merchant-detail-new 改 ALL_ON,
 # 让 F-9 4 业务指标(merchant_view_total / recommend_total)demo 现场 Grafana 全可见
 # like-cache-bypass 保持 WHITELIST_ONLY(ALL_ON 会让所有 sid 直查 MySQL,绕过 Redis L1
-# 缓存,F-5 bullet "P99 28/25ms" 失效 — 边界不可破坏)
+# 缓存,F-5 bullet "P99 < 100ms(78/76ms),26158 reqs 0 fail" 失效 — 边界不可破坏)
 feature-flag:
   enabled: true
   default-flags:
