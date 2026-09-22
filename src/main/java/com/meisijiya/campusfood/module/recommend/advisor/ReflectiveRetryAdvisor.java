@@ -69,7 +69,29 @@ public class ReflectiveRetryAdvisor implements BaseAdvisor {
 
     @Override
     public ChatClientResponse adviseCall(ChatClientRequest request, CallAdvisorChain chain) {
-        // 第一次调用 — 信任 inner advisor 链
+        // === F-14.2:Spring AI 1.1.x CallAdvisorChain single-pass 语义保护 ===
+        // Spring AI 的 {@link CallAdvisor} 接口约定 before() → chain.nextCall() → after(),
+        // 这是单次遍历。但 RRA 的需求是"校验失败 → 反思 → 重试一次",
+        // 所以本方法在首次 nextCall 之外还要手动再调一次 nextCall。
+        //
+        // 直接复用 chain 走第二次 nextCall 时,inner chain 的 deque 已被 drain 一次,
+        // 当前能工作的原因是 RBFA try-catch IllegalStateException(F-14 commit 3381694)
+        // + RBFA attempt=2 接管(F-15 commit d6134dc)的 inner advisor 状态机撑住。
+        //
+        // 风险:Spring AI 1.2.x 升级时,若 DefaultCallAdvisorChain.reOrder() 行为变化
+        // (比如"每次 nextCall 都重新填充 deque"),RRA 的第二次 nextCall 可能拿到不同
+        // 的 inner advisor 顺序,RBFA 拦截路径可能失效。
+        //
+        // 防御:F-14.2 改用 chain.copy(this) —— Spring AI 文档明确推荐的重试模式。
+        // copy(this) 生成"不含 RRA 自己的链副本",deque 头是 RBFA → CM,RRA 不在副本里
+        // (防自身无限递归),且每次 nextCall 都从 copy 链的 deque 头开始(语义稳定,
+        // 不依赖 framework deque 状态机)。
+        //
+        // 深度兜底:RRA 之外,RuleBasedFallbackAdvisor.adviseCall 内仍有
+        // try-catch IllegalStateException(F-15)兜底,即使 deque 行为变化导致首次
+        // nextCall 异常,也能 fallback 到 buildFallbackReplacedResponse。
+
+        // 第一次调用 — 信任 inner advisor 链(走原 chain)
         ChatClientResponse first = chain.nextCall(request);
         String firstContent = extractText(first);
         if (firstContent != null && safeIsValid(firstContent)) {
@@ -79,6 +101,7 @@ public class ReflectiveRetryAdvisor implements BaseAdvisor {
         log.debug("F-3 first response invalid, building retry request with reflection feedback");
 
         // 第二次调用 — 把违规摘要回拼到 user 消息 + 上下文标记 attempt=2
+        // 走 copy 链(F-14.2):不含 RRA 自己,语义稳定不依赖 framework deque 状态机
         String violations = firstContent == null
                 ? "响应为空或无法解析"
                 : String.join("; ", collectViolations(firstContent));
@@ -87,7 +110,7 @@ public class ReflectiveRetryAdvisor implements BaseAdvisor {
                 .context(ATTEMPT_KEY, 2)
                 .build();
 
-        ChatClientResponse second = chain.nextCall(retryRequest);
+        ChatClientResponse second = chain.copy(this).nextCall(retryRequest);
         // 第二次响应 — RuleBasedFallbackAdvisor 在 inner 链中看到 attempt=2 后会接管,
         // 直接替换成 schema 合规的 fallback JSON。这里再做一次校验:
         //   - 如果 RBFA 已替换 → fallback 必然合规 → 返回

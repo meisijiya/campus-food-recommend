@@ -31,7 +31,7 @@
     "stage" : "CUISINE",
     "zone" : "Z-south",
     "status" : 200,
-    "content" : "{\"merchantId\":[\"m-123\",\"m-145\",\"m-167\"],\"reason\":\"Z-south区域以面食为主，其中m-123的招牌牛肉面、m-145的酸辣粉和m-167的担担面均口碑优良，出餐快、价格亲民，符合学生对C-noodle类别的高频需求\",\"confidence\":0.92}",
+    "content" : "{\"merchantId\":[\"m-104\",\"m-107\",\"m-112\"],\"reason\":\"Z-south区域中，m-104（南苑面馆）主打手工拉面与酸辣粉，m-107（湘味 noodle 小铺）专注湖南风味米粉与炖汤拌面，m-112（川香面坊）以担担面和红油抄手见长，三者均聚焦C-noodle类目且口碑稳定、出餐快、学生复购率高\",\"confidence\":0.92}",
     "final_valid" : true,
     "first_attempt_valid" : true,
     "is_fallback" : false
@@ -40,7 +40,7 @@
     "stage" : "MERCHANT",
     "zone" : "Z-library",
     "status" : 200,
-    "content" : "{\"merchantId\":[\"m-001\"],\"reason\":\"Z-library附近唯一C类快餐商户，步行2分钟可达，主打高效出餐与高性价比套餐，契合图书馆学生即取即走需求\",\"confidence\":0.92}",
+    "content" : "{\"merchantId\":[\"m-001\"],\"reason\":\"Z-library附近唯一C类快餐商户，主打高效出餐与高性价比套餐，步行1分钟可达，符合学生即时简餐需求\",\"confidence\":0.92}",
     "final_valid" : true,
     "first_attempt_valid" : true,
     "is_fallback" : false
@@ -49,7 +49,7 @@
     "stage" : "INIT",
     "zone" : "Z-north",
     "status" : 200,
-    "content" : "{\"merchantId\":[\"m-001\",\"m-003\",\"m-005\"],\"reason\":\"综合考虑校园内高人气、出餐快、价格亲民及学生复购率，优先推荐西区食堂（m-001）、南门网红煎饼铺（m-003）和东区奶茶轻食站（m-005），覆盖主食、小吃、饮品基础需求\",\"confidence\":0.92}",
+    "content" : "{\"merchantId\":[\"m-001\",\"m-003\",\"m-005\"],\"reason\":\"综合考虑校园内高人气、出餐快、价格亲民及学生复购率，优先推荐西区食堂（m-001）、南门网红煎饼摊（m-003）和东区奶茶轻食站（m-005），覆盖主食、小吃与饮品需求\",\"confidence\":0.92}",
     "final_valid" : true,
     "first_attempt_valid" : true,
     "is_fallback" : false
