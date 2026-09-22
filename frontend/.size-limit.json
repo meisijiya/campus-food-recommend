@@ -1,0 +1,26 @@
+[
+  {
+    "name": "登录页入口 (index-*.js, 路由懒加载后)",
+    "path": "dist/assets/index-*.js",
+    "limit": "250 KB",
+    "gzip": true
+  },
+  {
+    "name": "Vue vendor chunk",
+    "path": "dist/assets/vue-*.js",
+    "limit": "100 KB",
+    "gzip": true
+  },
+  {
+    "name": "Axios vendor chunk",
+    "path": "dist/assets/axios-*.js",
+    "limit": "50 KB",
+    "gzip": true
+  },
+  {
+    "name": "LoginView 懒加载 chunk",
+    "path": "dist/assets/LoginView-*.js",
+    "limit": "20 KB",
+    "gzip": true
+  }
+]

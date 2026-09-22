@@ -1,56 +1,84 @@
 <script setup lang="ts">
 /**
- * MainView · placeholder(F-16.1)
- * 完整主路径流程(zone → cuisine → recommend → detail + 点赞闭环)留作 F-16.2。
- * 本 view 演示圆角 / 阴影 / 间距 token。
+ * MainView · F-16.2 主路径布局容器
+ * ---------------------------------------------------------------------------
+ * - 自动 init session(若 stage === INIT)
+ * - 顶部 step 指示器(zone → cuisine → recommend)
+ * - <router-view> 渲染当前 stage 子路由
+ * ---------------------------------------------------------------------------
  */
-const radii = [
-  { token: "radius-sm",   value: "0.25rem", class: "rounded-sm" },
-  { token: "radius-md",   value: "0.375rem", class: "rounded-md" },
-  { token: "radius-lg",   value: "0.5rem", class: "rounded-lg" },
-  { token: "radius-xl",   value: "0.75rem", class: "rounded-xl" },
-];
+import { onMounted, computed } from "vue";
+import { useRouter } from "vue-router";
+import { useSessionStore } from "@/stores/session";
 
-const shadows = [
-  { token: "shadow-xs", class: "shadow-xs" },
-  { token: "shadow-sm", class: "shadow-sm" },
-  { token: "shadow-md", class: "shadow-md" },
-  { token: "shadow-lg", class: "shadow-lg" },
-];
+const session = useSessionStore();
+const router = useRouter();
+
+const steps = [
+  { key: "ZONE",     label: "1 · 选商圈" },
+  { key: "CUISINE",  label: "2 · 选菜系" },
+  { key: "MERCHANT", label: "3 · 推荐结果" },
+] as const;
+
+const currentStepIdx = computed(() => {
+  switch (session.stage) {
+    case "INIT": return -1;
+    case "ZONE": return 0;
+    case "CUISINE": return 1;
+    case "MERCHANT": return 2;
+    default: return -1;
+  }
+});
+
+onMounted(async () => {
+  if (session.stage === "INIT") {
+    try {
+      await session.init();
+      // 默认跳到选商圈
+      if (router.currentRoute.value.name === "main-zone") {
+        // stay
+      }
+    } catch {
+      // 拦截器已 toast,这里静默
+    }
+  }
+});
+
+function gotoStep(idx: number) {
+  if (idx === 0) router.push({ name: "main-zone" });
+  else if (idx === 1) router.push({ name: "main-cuisine" });
+  else if (idx === 2) router.push({ name: "main-recommend" });
+}
 </script>
 
 <template>
-  <div class="max-w-content mx-auto p-6 space-y-6">
-    <h1 class="text-2xl font-semibold">MainView</h1>
+  <div class="max-w-content mx-auto p-6 space-y-4">
+    <!-- Step indicator -->
+    <ol
+      class="flex items-center gap-2 text-sm"
+      aria-label="主路径步骤"
+      data-testid="step-indicator"
+    >
+      <li
+        v-for="(s, idx) in steps"
+        :key="s.key"
+        :class="[
+          'px-3 py-1 rounded-md border',
+          currentStepIdx === idx
+            ? 'bg-primary-500 text-white border-primary-500'
+            : currentStepIdx > idx
+            ? 'bg-primary-50 text-primary-700 border-primary-100 cursor-pointer hover:bg-primary-100'
+            : 'bg-surface text-text-disabled border-border',
+        ]"
+        :data-testid="`step-${idx}`"
+        :aria-current="currentStepIdx === idx ? 'step' : undefined"
+        @click="currentStepIdx > idx && gotoStep(idx)"
+      >
+        {{ s.label }}
+      </li>
+    </ol>
 
-    <div class="placeholder-banner" role="status">
-      F-16.1 placeholder · 主路径四阶段流程(zone → cuisine → recommend → detail)留作 F-16.2。
-    </div>
-
-    <!-- 圆角演示 === -->
-    <section class="space-y-3">
-      <h2 class="text-lg font-medium">视觉 token demo · 圆角</h2>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div v-for="r in radii" :key="r.token" class="space-y-2">
-          <div :class="['bg-primary-50', 'p-6', 'border', 'border-border', r.class]">
-            <span class="text-sm text-primary-700 font-medium">{{ r.class }}</span>
-          </div>
-          <p class="text-xs text-text-secondary"><code class="font-mono">{{ r.token }}</code> · {{ r.value }}</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- 阴影演示 === -->
-    <section class="space-y-3">
-      <h2 class="text-lg font-medium">视觉 token demo · 阴影</h2>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div v-for="s in shadows" :key="s.token" class="space-y-2">
-          <div :class="['bg-surface', 'p-6', 'rounded-lg', s.class]">
-            <span class="text-sm font-medium">{{ s.class }}</span>
-          </div>
-          <p class="text-xs text-text-secondary"><code class="font-mono">{{ s.token }}</code></p>
-        </div>
-      </div>
-    </section>
+    <!-- Nested router outlet -->
+    <router-view />
   </div>
 </template>

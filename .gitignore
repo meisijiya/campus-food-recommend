@@ -75,6 +75,11 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/.cache/
+# Vitest coverage 报告(本地查,不入仓)
+frontend/coverage/
+# Playwright test-results(失败截图 / trace,本地查,不入仓)
+frontend/test-results/
+frontend/playwright-report/
 
 # 截图清单(招实习现场 + README,本地维护,不入仓)
 docs/design/frontend/screenshots/

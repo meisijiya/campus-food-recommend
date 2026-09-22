@@ -1,56 +1,130 @@
 <script setup lang="ts">
 /**
- * LoginView · placeholder(F-16.1)
- * 完整登录逻辑(login form + JWT 提交 + 演示账号提示)留作 F-16.2。
- * 本 view 演示视觉 token:色板 / 字号 / 圆角 / 间距,作为招实习现场 README 截图素材。
+ * LoginView · F-16.2 完整登录页
+ * ---------------------------------------------------------------------------
+ * - BaseInput + 内联错误(form 表单错误走 40000,不弹 toast)
+ * - BaseButton + loading(防重复提交)
+ * - useAuthStore.login() → 成功跳 redirect 或 /main
+ * - 演示账号提示卡(招实习现场)
+ * ---------------------------------------------------------------------------
  */
-const colorSwatches = [
-  { name: "primary-500",   bg: "#3D8B5F", fg: "#FFFFFF", label: "校园绿" },
-  { name: "secondary-500", bg: "#E0A458", fg: "#FFFFFF", label: "暖橙" },
-  { name: "accent-500",    bg: "#C75450", fg: "#FFFFFF", label: "校园红" },
-  { name: "bg",            bg: "#FAF7F2", fg: "#2C2A26", label: "暖白底" },
-  { name: "text-primary",  bg: "#2C2A26", fg: "#FFFFFF", label: "暖深灰" },
+import { ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
+import { useUiStore } from "@/stores/ui";
+import BaseInput from "@/components/BaseInput.vue";
+import BaseButton from "@/components/BaseButton.vue";
+import BaseCard from "@/components/BaseCard.vue";
+
+const auth = useAuthStore();
+const ui = useUiStore();
+const route = useRoute();
+const router = useRouter();
+
+const username = ref("");
+const password = ref("");
+const usernameError = ref<string>("");
+const passwordError = ref<string>("");
+const submitting = ref(false);
+
+interface DemoAccount {
+  label: string;
+  username: string;
+  password: string;
+  role: string;
+}
+
+const demoAccounts: DemoAccount[] = [
+  { label: "普通用户", username: "user",   password: "user123",   role: "USER" },
+  { label: "管理员",   username: "admin",  password: "admin123",  role: "ADMIN" },
 ];
 
-const fontSizes = [
-  { token: "text-xs",   px: 12 },
-  { token: "text-sm",   px: 14 },
-  { token: "text-base", px: 16 },
-  { token: "text-lg",   px: 18 },
-  { token: "text-xl",   px: 20 },
-  { token: "text-2xl",  px: 24 },
-  { token: "text-3xl",  px: 30 },
-];
+function fillDemo(d: DemoAccount) {
+  username.value = d.username;
+  password.value = d.password;
+}
+
+async function onSubmit() {
+  usernameError.value = "";
+  passwordError.value = "";
+  if (!username.value) {
+    usernameError.value = "用户名不能为空";
+    return;
+  }
+  if (!password.value) {
+    passwordError.value = "密码不能为空";
+    return;
+  }
+  submitting.value = true;
+  try {
+    await auth.login(username.value, password.value);
+    ui.toast({ type: "success", message: "登录成功" });
+    const redirect = typeof route.query.redirect === "string" ? route.query.redirect : "/main";
+    router.push(redirect);
+  } catch (err) {
+    // 表单错误走 input.error;网络/业务错误已在拦截器 toast
+    const message = err instanceof Error ? err.message : "登录失败";
+    if (message.includes("40000") || message.includes("参数")) {
+      passwordError.value = message;
+    }
+  } finally {
+    submitting.value = false;
+  }
+}
 </script>
 
 <template>
-  <div class="max-w-content mx-auto p-6 space-y-6">
-    <h1 class="text-2xl font-semibold">LoginView</h1>
+  <div class="max-w-md mx-auto p-6 space-y-4">
+    <BaseCard title="登录 · Campus Food Recommend">
+      <form class="space-y-3" data-testid="login-form" @submit.prevent="onSubmit">
+        <BaseInput
+          v-model="username"
+          label="用户名"
+          placeholder="请输入用户名"
+          required
+          autocomplete="username"
+          :error="usernameError"
+        />
+        <BaseInput
+          v-model="password"
+          label="密码"
+          type="password"
+          placeholder="请输入密码"
+          required
+          autocomplete="current-password"
+          :error="passwordError"
+        />
+        <BaseButton type="submit" :loading="submitting" block data-testid="login-submit">
+          登录
+        </BaseButton>
+      </form>
+    </BaseCard>
 
-    <div class="placeholder-banner" role="status">
-      F-16.1 placeholder · 此页面完整登录逻辑留作 F-16.2(含 JWT 拦截器 + 演示账号提示卡)。
-    </div>
-
-    <!-- 色板演示 === -->
-    <section class="space-y-3">
-      <h2 class="text-lg font-medium">视觉 token demo · 色板</h2>
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div v-for="c in colorSwatches" :key="c.name" class="space-y-2">
-          <div :style="{ backgroundColor: c.bg, color: c.fg }" class="token-swatch">{{ c.name }}</div>
-          <p class="text-xs text-text-secondary">{{ c.label }}<br /><code class="font-mono">{{ c.bg }}</code></p>
+    <BaseCard title="演示账号(招实习现场)" bordered>
+      <div class="space-y-2">
+        <div
+          v-for="d in demoAccounts"
+          :key="d.username"
+          class="flex items-center justify-between gap-2 text-sm"
+        >
+          <div>
+            <span class="font-medium">{{ d.label }}</span>
+            <span class="text-text-secondary ml-2">
+              {{ d.username }} / {{ d.password }}
+            </span>
+            <BaseTag size="sm" :variant="d.role === 'ADMIN' ? 'primary' : 'default'">
+              {{ d.role }}
+            </BaseTag>
+          </div>
+          <button
+            type="button"
+            class="text-xs text-primary-500 hover:underline"
+            @click="fillDemo(d)"
+          >
+            填充
+          </button>
         </div>
       </div>
-    </section>
-
-    <!-- 字号演示 === -->
-    <section class="space-y-3">
-      <h2 class="text-lg font-medium">视觉 token demo · 字号</h2>
-      <div class="token-card space-y-2">
-        <div v-for="f in fontSizes" :key="f.token" class="flex items-baseline gap-4">
-          <span class="font-mono text-xs text-text-secondary w-24">{{ f.token }} ({{ f.px }}px)</span>
-          <span :class="f.token" class="text-text-primary">校园美食推荐 demo</span>
-        </div>
-      </div>
-    </section>
+    </BaseCard>
   </div>
 </template>

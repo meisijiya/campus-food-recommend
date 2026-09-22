@@ -230,7 +230,7 @@ if (-not (Test-Path $frontendDir)) {
 } else {
     $npmBin = if ($env:NPM_BIN) { $env:NPM_BIN } else { "npm.cmd" }
 
-    # tsc 绫诲瀷妫€鏌?    Write-Host "[init.sh] 8/8 step 1/2: vue-tsc --noEmit ..."
+    # tsc 绫诲瀷妫€鏌?    Write-Host "[init.sh] 8/8 step 1/3: vue-tsc --noEmit ..."
     Push-Location $frontendDir
     try {
         & $npmBin run type-check 2>&1 | Select-Object -Last 10
@@ -240,8 +240,17 @@ if (-not (Test-Path $frontendDir)) {
             exit 1
         }
 
+        # vitest + coverage(楠岃瘉 5 涓噸鐐?store + recommend 绾嚱鏁?coverage >= 80%)
+        Write-Host "[init.sh] 8/8 step 2/3: vitest + coverage ..."
+        & $npmBin run test:coverage 2>&1 | Select-Object -Last 25
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[init.sh] FAIL: vitest / coverage 鏈€氳繃(鎴?80% 闃愬€嶆湭婊¤冻)"
+            Pop-Location
+            exit 1
+        }
+
         # vite build(瀹為檯鏋勫缓,楠岃瘉鏁翠釜閾捐矾)
-        Write-Host "[init.sh] 8/8 step 2/2: vite build ..."
+        Write-Host "[init.sh] 8/8 step 3/3: vite build ..."
         & $npmBin run build 2>&1 | Select-Object -Last 15
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[init.sh] FAIL: vite build 鏈€氳繃"
@@ -251,6 +260,6 @@ if (-not (Test-Path $frontendDir)) {
     } finally {
         Pop-Location
     }
-    Write-Host "[init.sh] PASS: 闃舵 8/8 frontend build + tsc 閫氳繃"
+    Write-Host "[init.sh] PASS: 闃舵 8/8 frontend build + tsc + vitest 閫氳繃"
 }
 Write-Host "[init.sh] PASS:鍏ㄩ儴 8 闃舵閫氳繃"

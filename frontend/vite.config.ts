@@ -23,5 +23,14 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: true,
     target: "es2022",
+    // F-16.2 slice 8:分离 vendor,辅助 size-limit 测出真实单 bundle。
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vue: ["vue", "vue-router", "pinia"],
+          axios: ["axios"],
+        },
+      },
+    },
   },
 });
