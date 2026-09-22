@@ -10,8 +10,17 @@ spring:
       base-url: ${DASHSCOPE_BASE_URL:}
       chat:
         options:
+          # F-14.1:base model 保持 qwen-plus（qwen3.7-flash 在该 workspace endpoint 不识别,
+          # HTTP 400 "url error, please check url" 100/100 — 见 18-F14.1-first-attempt-88pct.md §工程进度 11:50+ 段);
+          # 强化路径靠 response_format=json_object + prompt 强化(JSON example + "m-" 前缀提示)
+          # bench 实证:100 样本 first_attempt_valid_count=100 (100%),远超 88% target
           model: qwen-plus
-          temperature: 0.3
+          # F-14.1:temperature 从 0.3 → 0.1,降低随机性,提高 first_attempt 合规率
+          temperature: 0.1
+          # F-14.1:百炼 response_format=json_object 强制 model 输出标准 JSON 字符串
+          # (prompt 必须含 "JSON" 关键词,已通过 RecommendService.RECOMMEND_TEMPLATE 强化实现)
+          response-format:
+            type: json_object
 
 logging:
   level:

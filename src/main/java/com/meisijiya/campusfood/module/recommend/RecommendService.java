@@ -51,6 +51,13 @@ public class RecommendService {
     /**
      * 推荐 prompt 模板 — 仅引用 Skill 名称(由 {@link SkillRegistry} 运行时注入真实数据)。
      * 该模板不可 inline 任何目录数据(违反 plan.md §Global Constraints #8)。
+     *
+     * <p><b>F-14.1 强化</b>:
+     * <ul>
+     *   <li>尾部追加 RecommendationSchema 完整字段说明 + 一个合规 JSON 例子(让 model 模仿)</li>
+     *   <li>明确"只输出 JSON,不要解释",适配百炼 response_format=json_object 模式(prompt 必须含 "JSON" 关键词,否则 API 报错)</li>
+     *   <li>merchantId 必须以 {@code m-} 前缀开头 —— schema 的 {@code pattern} 严格约束,提示显式给出避免 first_attempt 踩点</li>
+     * </ul>
      */
     static final String RECOMMEND_TEMPLATE = """
             你是校园美食推荐助手。请根据用户当前会话阶段给出推荐。
@@ -58,7 +65,14 @@ public class RecommendService {
             {skill:zone}
             {skill:cuisine}
             {skill:merchant}
-            请输出严格符合 RecommendationSchema 的 JSON。
+
+            请输出严格符合 RecommendationSchema 的 JSON(只输出 JSON,不要任何解释或前缀):
+            - merchantId: 字符串数组,每项必须以 "m-" 开头(如 "m-001"、"m-002"),按 confidence 降序
+            - reason: 字符串,1-500 字符,说明推荐理由
+            - confidence: 0.0~1.0 的浮点数
+
+            JSON 示例:
+            {"merchantId":["m-001","m-002","m-003"],"reason":"西区食堂的黄焖鸡和面食较近,适合学生快餐需求","confidence":0.85}
             """;
 
     private final ChatClient recommendChatClient;
@@ -105,7 +119,8 @@ public class RecommendService {
         log.debug("F-3 recommend sid={} stage={} promptLen={}", sid, ctx.stage(), fullPrompt.length());
 
         List<Message> messages = List.of(
-                new SystemMessage("你是校园美食推荐助手。"),
+                // F-14.1:system message 强化 — 显式约束"只输出 JSON",与 response_format=json_object 模式呼应
+                new SystemMessage("你是校园美食推荐助手。严格按 RecommendationSchema 输出 JSON,只输出 JSON,无任何其他文本。"),
                 new UserMessage(fullPrompt)
         );
         Prompt prompt = new Prompt(messages);

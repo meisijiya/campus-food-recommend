@@ -2,56 +2,56 @@
   "ticket" : "F-3-structured-output",
   "profile" : "bench",
   "sample_count" : 100,
-  "first_attempt_valid_count" : 0,
-  "first_attempt_compliance_rate" : 0.0,
+  "first_attempt_valid_count" : 100,
+  "first_attempt_compliance_rate" : 1.0,
   "final_valid_count" : 100,
   "final_compliance_rate" : 1.0,
   "first_attempt_target" : 0.88,
-  "first_attempt_target_met" : false,
+  "first_attempt_target_met" : true,
   "samples_first_5" : [ {
     "index" : 0,
     "stage" : "INIT",
     "zone" : "Z-west",
     "status" : 200,
-    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "content" : "{\"merchantId\":[\"m-001\",\"m-003\",\"m-005\"],\"reason\":\"综合考虑校园内高人气、出餐快、价格亲民及学生复购率，优先推荐西区食堂（m-001）、南门网红煎饼摊（m-003）和东区奶茶轻食站（m-005），覆盖主食、小吃与饮品需求\",\"confidence\":0.92}",
     "final_valid" : true,
-    "first_attempt_valid" : false,
-    "is_fallback" : true
+    "first_attempt_valid" : true,
+    "is_fallback" : false
   }, {
     "index" : 1,
     "stage" : "ZONE",
     "zone" : "Z-east",
     "status" : 200,
-    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "content" : "{\"merchantId\":[\"m-101\",\"m-103\",\"m-105\"],\"reason\":\"Z-east区域涵盖东区食堂、樱花咖啡角和桃李烘焙坊，其中东区食堂（m-101）口碑稳定、出餐快；樱花咖啡角（m-103）提供轻食与咖啡，适合课间小憩；桃李烘焙坊（m-105）主打现烤面包与奶茶，深受低年级学生喜爱。三者地理集中、人气高、复购率强。\",\"confidence\":0.92}",
     "final_valid" : true,
-    "first_attempt_valid" : false,
-    "is_fallback" : true
+    "first_attempt_valid" : true,
+    "is_fallback" : false
   }, {
     "index" : 2,
     "stage" : "CUISINE",
     "zone" : "Z-south",
     "status" : 200,
-    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "content" : "{\"merchantId\":[\"m-123\",\"m-145\",\"m-167\"],\"reason\":\"Z-south区域以面食为主，其中m-123的招牌牛肉面、m-145的酸辣粉和m-167的担担面均口碑优良，出餐快、价格亲民，符合学生对C-noodle类别的高频需求\",\"confidence\":0.92}",
     "final_valid" : true,
-    "first_attempt_valid" : false,
-    "is_fallback" : true
+    "first_attempt_valid" : true,
+    "is_fallback" : false
   }, {
     "index" : 3,
     "stage" : "MERCHANT",
     "zone" : "Z-library",
     "status" : 200,
-    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "content" : "{\"merchantId\":[\"m-001\"],\"reason\":\"Z-library附近唯一C类快餐商户，步行2分钟可达，主打高效出餐与高性价比套餐，契合图书馆学生即取即走需求\",\"confidence\":0.92}",
     "final_valid" : true,
-    "first_attempt_valid" : false,
-    "is_fallback" : true
+    "first_attempt_valid" : true,
+    "is_fallback" : false
   }, {
     "index" : 4,
     "stage" : "INIT",
     "zone" : "Z-north",
     "status" : 200,
-    "content" : "{\"merchantId\":[\"m-001\",\"m-002\",\"m-003\"],\"reason\":\"按本地热门标签排序的降级推荐(F-3 mock catalog)\",\"confidence\":0.5}",
+    "content" : "{\"merchantId\":[\"m-001\",\"m-003\",\"m-005\"],\"reason\":\"综合考虑校园内高人气、出餐快、价格亲民及学生复购率，优先推荐西区食堂（m-001）、南门网红煎饼铺（m-003）和东区奶茶轻食站（m-005），覆盖主食、小吃、饮品基础需求\",\"confidence\":0.92}",
     "final_valid" : true,
-    "first_attempt_valid" : false,
-    "is_fallback" : true
+    "first_attempt_valid" : true,
+    "is_fallback" : false
   } ]
 }
